@@ -8,5 +8,6 @@ __pycache__/
 *.npz
 kaggle.json
 .env
-submission_drafts/*.zip
+submission_drafts/
 wandb/
+*_log.txt
