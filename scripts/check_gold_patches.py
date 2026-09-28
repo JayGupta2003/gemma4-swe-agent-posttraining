@@ -49,10 +49,23 @@ async def check_one(evaluator: Evaluator, config: EvalConfig, task, sem: asyncio
                 start_time=start,
             )
             resolved, error = res.resolved, res.error
+            test_output, test_exit_code = res.test_output, res.test_exit_code
         except Exception as e:  # noqa: BLE001 - want to keep going across all 129 tasks
             resolved, error = False, f"{type(e).__name__}: {e}"
+            test_output, test_exit_code = "", -1
 
-        result = {"instance_id": task.instance_id, "repo": task.repo, "resolved": resolved, "error": error}
+        if test_output:
+            log_path = RESULTS_DIR / "test_outputs" / f"{task.instance_id}.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(test_output, encoding="utf-8")
+
+        result = {
+            "instance_id": task.instance_id,
+            "repo": task.repo,
+            "resolved": resolved,
+            "error": error,
+            "test_exit_code": test_exit_code,
+        }
         status = "PASS" if resolved else "FAIL"
         print(f"{task.instance_id} ({task.repo}): {status}" + (f" -- {error}" if error else ""))
         return result

@@ -11,3 +11,4 @@ kaggle.json
 submission_drafts/
 wandb/
 *_log.txt
+*.log
