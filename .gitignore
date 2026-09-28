@@ -1,0 +1,12 @@
+data/
+adapters/*.safetensors
+logs/
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+*.tgz
+*.npz
+kaggle.json
+.env
+submission_drafts/*.zip
+wandb/
