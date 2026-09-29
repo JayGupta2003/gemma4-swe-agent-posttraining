@@ -1,4 +1,5 @@
 data/
+data_extra/
 adapters/*.safetensors
 logs/
 *.pyc
