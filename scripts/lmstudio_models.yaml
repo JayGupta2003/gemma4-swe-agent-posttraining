@@ -1,0 +1,17 @@
+# Points our submission's declared model (gemma-4-31b-it-qat-w4a16-ct) at a locally
+# running LM Studio server instead of the real 31B checkpoint, for fast local
+# smoke-testing of the agent scaffold's prompt/tool-calling behavior. Load a Gemma-4
+# GGUF variant in LM Studio, start its local server (Developer tab), then pass this
+# file to `swegemma eval --models-yaml scripts/lmstudio_models.yaml`.
+#
+# This is a stand-in for iteration speed only -- a smaller/quantized model will not
+# match the real 31B's SWE-solving quality. It only validates that the harness
+# integration, prompt structure, and tool-calling loop behave sensibly end to end.
+#
+# Update the `path` below to match whatever LM Studio reports at
+# http://localhost:1234/v1/models for your currently loaded model.
+models:
+  gemma-4-31b-it-qat-w4a16-ct:
+    path: openai/google/gemma-4-e4b
+    api_base: http://localhost:1234/v1
+    api_key: lm-studio

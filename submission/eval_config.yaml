@@ -1,0 +1,10 @@
+# Per-task budgets for Stage 1 inference. Sized against the shared 12h/~120-task
+# scoring budget (see docs/STRATEGY.md): a well-behaved agent should finish well
+# under this per the "under 8-10 turns" goal in prompts/system.md -- these are a
+# safety net against a stuck/looping task consuming a disproportionate share of
+# the shared budget, not a target.
+evaluation:
+  timeout_seconds: 120
+  max_tool_calls: 40
+  max_time_minutes: 10
+  max_turns: 40
