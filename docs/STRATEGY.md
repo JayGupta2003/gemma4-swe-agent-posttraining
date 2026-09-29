@@ -1,5 +1,32 @@
 # Winning the Gemma 4 Developer Agent Competition (Main + Paper Track)
 
+## Update — Workstream 2: SWE-Pallets-X verified, combined pool now 265 tasks (2026-09-30)
+
+Downloaded `SWE-Pallets-X` (community dataset, 476 tasks across 8 repos: click, flask, werkzeug, jinja2, markupsafe, itsdangerous, pytest, sympy — CC0, same format as the official dataset). Ran the same gold-patch verification discipline we applied to the official 129, and it was just as necessary: naive verification failed almost everything for reasons that had nothing to do with patch correctness.
+
+**Two new infrastructure pieces, both real and reusable** (`scripts/era_wheels.py`, `scripts/check_gold_patches_era.py`):
+1. **Self-exclusive wheel resolution**: our shared `data/wheels/` cache has no concept of "this package is itself a repo under test" — adding `werkzeug` as a dependency wheel for `flask` tasks was silently corrupting `werkzeug`'s *own* self-tests (its editable-installed source got shadowed by the wrong PyPI version). Fix: build a per-task wheels directory that always excludes the current task's own repo package, sourced from a "safe base" that never contains any of the 12 self-testable package names across both datasets.
+2. **Era-aware version pinning**: this dataset's tasks span years of history and different tasks need genuinely different dependency versions (the README calls this out explicitly: "era-matched Python and era-pinned dependencies"). For each task, we determine its cutoff date (`fix_date`/`created_at`) and use PyPI's release API to find the latest version of each needed dependency published before that date — replicating what the dataset's own `pipeline/era_pin.py` does, since we don't have access to their actual per-task pins.
+3. Also found and fixed two structural, non-wheel bugs discovered via `pytest`'s own self-tests: a missing `setuptools_scm`-generated `_version.py` (these snapshots have no git tag history to compute a real version from), and the harness's `setup_workspace_test_config` overwriting a project's `pytest.ini` whenever the *real* config lived in `pyproject.toml`'s `[tool.pytest.ini_options]` instead — losing load-bearing `addopts` like `-p pytester`. Both fixed by pre-patching the snapshot archive before extraction.
+4. Found a genuine caching bug in `swegemma` itself while building this: the host-side unpacked-wheel cache (`%TEMP%\swegemma_sp_cache_v8`) is keyed by a fixed name (`sp_base`) regardless of which `wheels_dir` built it — meaning switching per-task wheel directories mid-run gets silently ignored unless the cache is cleared before every single verification attempt. This forces era-aware verification to run at `concurrency=1` (the cache isn't safe for concurrent per-task wheel sets either).
+
+**Final result: 213/476 (44.7%) resolved**, wildly uneven by repo — and the *why* matters for using this data:
+
+| Repo | Resolved | Why the ones that fail, fail |
+| :--- | :--- | :--- |
+| `click` | 101/109 (93%) | mostly pure-Python, few external deps — the era-aware fix works cleanly |
+| `werkzeug` | 41/43 (95%) | same |
+| `itsdangerous` | 1/1 (100%) | tiny sample |
+| `markupsafe` | 2/4 (50%) | small sample; some need pre-2024 compiled versions (see below) |
+| `flask` | 2/29 (7%) | needs old `markupsafe`/`werkzeug` pins from before Python 3.13 existed (Oct 2024) — **no wheel built for an old package version can ever have a `cp313` build if the version predates cp313's existence**; this is a hard ceiling, not a bug. Also hits the same pytest-internals sensitivity as pytest itself. |
+| `jinja2` | 2/29 (7%) | same old-compiled-dependency ceiling via `markupsafe` |
+| `pytest` | 4/132 (3%) | pytest is the test *runner* for every task, but our container bakes in one fixed modern pytest version — any task whose test suite reaches into pytest-internal APIs that changed across versions (common) breaks, independent of era-pinning anything else |
+| `sympy` | 60/129 (47%) | mixed — large repo, many eras, no single dominant blocker found |
+
+**Net effect on the training pool**: official 52/129 + SWE-Pallets-X 213/476 = **265 verified-usable tasks across 12 repos** (vs. 52 before this workstream) — roughly 5x. Per-task results: `submission_drafts/gold_patch_check/swe-pallets-x_era/gold_patch_results.json`.
+
+**Known remaining limitation, deliberately not chased further**: the pytest-version-sensitivity problem (affecting `pytest`, and significant parts of `flask`/`jinja2`) would need per-task pytest version pinning too — a materially bigger lift (pytest is the test *runner*, not a regular dependency, so swapping it per-task means changing how the container invokes tests, not just what's importable) with a genuinely open-ended number of possible additional layers underneath (we found 3 distinct root causes for pytest alone before stopping). Decided this wasn't worth chasing further given `click`+`werkzeug`+`sympy`+existing official pool already gives a solid, diverse 265-task pool. Revisit only if training signal from this pool proves insufficient.
+
 ## Update — first real submission made (2026-09-29)
 
 Submitted the Workstream 1 scaffold (submission ID `56682704`, status `PENDING` as of submission time) — this used today's 1/day slot, so no further submissions until tomorrow.
