@@ -1,10 +1,20 @@
-# Per-task budgets for Stage 1 inference. Sized against the shared 12h/~120-task
-# scoring budget (see docs/STRATEGY.md): a well-behaved agent should finish well
-# under this per the "under 8-10 turns" goal in prompts/system.md -- these are a
-# safety net against a stuck/looping task consuming a disproportionate share of
-# the shared budget, not a target.
+# Per-task budgets for Stage 1 inference, against the shared 12h/~120-task scoring
+# budget (see docs/STRATEGY.md). Submission 56682704 (2026-09-29) timed out on the
+# real scorer with the old, much looser values here (timeout_seconds: 120,
+# max_tool_calls: 40, max_time_minutes: 10, max_turns: 40) -- 10 min/task x ~120
+# tasks is already 20h if the ceiling gets hit even moderately often, and per the
+# harness docs `max_time_minutes` measures ONLY time inside the agent loop: Docker
+# container setup/dependency install (both the agent sandbox AND the separate
+# verification container) happens OUTSIDE that budget but still burns real
+# wall-clock time against the shared 12h. So the real per-task cost is
+# (uncounted setup overhead) + (up to max_time_minutes) + (uncounted verification
+# overhead) -- these numbers only bound the middle piece. Tightened substantially
+# so one stuck/looping task (which local LM Studio smoke tests showed does happen)
+# can't eat a disproportionate share of the shared budget, matching the "under
+# 8-10 turns" goal in prompts/system.md more literally instead of leaving huge
+# headroom above it.
 evaluation:
-  timeout_seconds: 120
-  max_tool_calls: 40
-  max_time_minutes: 10
-  max_turns: 40
+  timeout_seconds: 60
+  max_tool_calls: 15
+  max_time_minutes: 4
+  max_turns: 15
