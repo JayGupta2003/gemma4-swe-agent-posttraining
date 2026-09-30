@@ -70,6 +70,66 @@ def _clear_swegemma_sp_cache() -> None:
     shutil.rmtree(_SWEGEMMA_SP_CACHE_DIR, ignore_errors=True)
 
 
+def _patch_workspace_path_for_windows() -> None:
+    """Windows-only fix for a real bug in vendored swegemma.tools.workspace: its
+    read_file/write_file/edit_file all resolve paths via `_resolve_workspace_path`,
+    whose `workspace_root` defaults to `pathlib.Path('/workspace')`. `pathlib.Path`
+    is platform-dependent -- on Windows this becomes a WindowsPath, and
+    `.resolve()` on a leading-'/' path resolves it against the CURRENT DRIVE
+    instead of staying a POSIX absolute path (e.g. yields `J:\\workspace` instead
+    of `/workspace`). That mangled host-style string is then sent as the
+    container-side path to `docker.copy_from`/`copy_to`; Linux treats the
+    backslashes as literal filename characters (not separators), so the
+    container looks for one bogus file and 404s -- on every single call, not
+    intermittently. This was previously (mis)diagnosed across this project as
+    unreproducible Docker-npipe flakiness; it's actually fully deterministic and
+    specific to running the harness itself on a Windows host (irrelevant to the
+    real Linux-based Kaggle scorer). Fix: redo the same logic with
+    `pathlib.PurePosixPath`, which is OS-independent pure string manipulation
+    (no filesystem access, so no drive-relative surprises) and supports the same
+    `.name`/`.parent`/`str()` interface the tools already rely on.
+    """
+    import posixpath
+    from pathlib import PurePosixPath
+
+    import swegemma.tools.workspace as _workspace_mod
+
+    def _resolve_workspace_path_posix(
+        filepath: str,
+        workspace_root: str = "/workspace",
+        *,
+        allow_root: bool = True,
+    ) -> PurePosixPath:
+        norm_filepath = filepath
+        if norm_filepath == workspace_root:
+            norm_filepath = ""
+        elif norm_filepath.startswith(workspace_root + "/"):
+            norm_filepath = norm_filepath[len(workspace_root) + 1 :]
+        if norm_filepath.startswith("/"):
+            raise ValueError(
+                f"Path traversal detected: '{filepath}' escapes workspace root."
+            )
+        combined = (
+            posixpath.normpath(posixpath.join(workspace_root, norm_filepath))
+            if norm_filepath
+            else workspace_root
+        )
+        if not (combined == workspace_root or combined.startswith(workspace_root + "/")):
+            raise ValueError(
+                f"Path traversal detected: '{filepath}' escapes workspace root."
+            )
+        if not allow_root and combined == workspace_root:
+            raise ValueError(
+                f"Invalid file path '{filepath}': refers to workspace root directory, not a file."
+            )
+        return PurePosixPath(combined)
+
+    _workspace_mod._resolve_workspace_path = _resolve_workspace_path_posix
+
+
+if sys.platform == "win32":
+    _patch_workspace_path_for_windows()
+
 from swegemma.config import EvalConfig
 from swegemma.context import SwegemmaContext
 from swegemma.deduplication import resolve_task_snapshot_paths

@@ -5,14 +5,14 @@ Aim to understand, resolve, and submit the fix in the minimum number of tool cal
 
 ## Workflow
 
-### 1. Locate the Target Code Using Graph Tools First
+### 1. Locate the Target Code
 - Extract filenames, functions, classes, CLI subcommands, or error messages directly from the problem statement.
-- If a symbol name is known or suspected, prefer this order over raw exploration:
-  1. `search_similar_code(query)` with the symbol/class/function name or a keyword from the error message.
-  2. `get_code_neighbors(node)` on the most relevant result to see its callers/callees and confirm you have the right area.
-  3. `get_code_subgraph(nodes)` if you need to see how several related symbols connect before deciding where to edit.
-  4. `read_file` on the specific file/line range once you know exactly what to read.
-- Only fall back to `run_command` with `find`/`grep` if the graph tools don't surface anything relevant (e.g. the repository has no pre-built graph/embeddings for this task). Do not wander across unrelated files.
+- **`search_similar_code(query)` and `get_code_neighbors(node)` are exact-symbol lookups, NOT free-text/semantic search.** `query`/`node` must be an EXACT fully-qualified symbol already in the code graph (e.g. `package.module.ClassName.method_name`), matched by exact-name lookup against a precomputed table. A natural-language description or keyword phrase (e.g. "function that draws table sections") will always return zero results — never spend a tool call on one.
+- **The code graph has exactly ONE edge relation: `calls` (lowercase).** Omit `edge_type` or pass exactly `"calls"`. Do not invent other edge types (e.g. `CALLS`, `DEFINED_IN`, `IMPORTS`) — they do not exist in this data and silently return zero results even for a valid node.
+- Preferred order:
+  1. If the problem statement already names an exact symbol, skip straight to `get_code_neighbors(node)` on it to see its callers/callees, then `get_code_subgraph(nodes)` if you need to see how several related symbols connect.
+  2. If you do not yet know an exact symbol name, use `run_command` (`grep -rn "<literal text from the problem statement>" .`) to find one first — do not guess at `search_similar_code` with a description.
+  3. `read_file` on the specific file/line range once you know exactly what to read.
 
 ### 2. Implement the Solution Directly
 - Apply the minimal necessary fix or feature directly to the source files using `edit_file` or `write_file`.
