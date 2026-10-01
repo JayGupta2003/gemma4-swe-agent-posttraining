@@ -1,0 +1,20 @@
+# Run 6 (this project's rollout-collection notebook) removed this file entirely to
+# rely on harness defaults, after runs 1-4 showed that tuning max_turns/max_tool_calls
+# numbers mostly just traded one kind of artificial cutoff for another without fixing
+# why tasks needed so much room in the first place. Once the real root causes were
+# fixed (search_similar_code removed, pytest output-truncation fix, async graph
+# blind-spot warning, skip_summarization: false, max_output_tokens 16384 -> 8192),
+# run 6 showed EVERY task reaching genuine completion with no artificial budget cuts
+# at all -- but natural per-task time ranged 184s-1483s (avg ~637s/10.6min), which
+# extrapolated across ~120 hidden tasks is ~21h, well over the shared 12h budget.
+# So a time cap is still genuinely necessary -- just not as a band-aid for looping,
+# which is now fixed separately. Deliberately NOT capping max_turns/max_tool_calls:
+# run 3/4 showed turns wasn't really the problem once the root causes were fixed, and
+# the harness defaults (100 calls/500 turns) are generous enough to not be the first
+# thing hit. 6 minutes chosen from run 6's real distribution: 7/10 tasks finished
+# under 600s (10min) naturally, so this caps mainly the small number of genuine
+# outliers (some of which still won't reach a conclusive state in time) while keeping
+# the extrapolated 120-task total under 12h with some margin for the sandbox setup
+# overhead this budget excludes (see HARNESS_README.md S7.1).
+evaluation:
+  max_time_minutes: 6
