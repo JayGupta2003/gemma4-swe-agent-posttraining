@@ -10,10 +10,12 @@ __pycache__/
 kaggle.json
 .env
 submission_drafts/
-# Staging copy synced from submission/ before pushing to the Kaggle dataset -- would
-# just drift out of sync with the tracked source if committed. kaggle_assets/notebook/
-# (the actual rollout-collection notebook + kernel-metadata.json) IS tracked.
+# Staging copies synced from submission/ or submission_drafts/rollout_submission/
+# before pushing to their Kaggle datasets -- would just drift out of sync with the
+# tracked source if committed. kaggle_assets/notebook/ and kaggle_assets/rollout_scale/
+# (the actual notebooks + kernel-metadata.json) ARE tracked.
 kaggle_assets/submission_dataset/
+kaggle_assets/rollout_agent_dataset/
 wandb/
 *_log.txt
 *.log
