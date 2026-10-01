@@ -20,6 +20,14 @@ Built `kaggle_assets/notebook/rollout_collection.ipynb` + `kernel-metadata.json`
 
 **Process lesson, adopted going forward**: validate any future `submission/` change against the real 31B via this notebook before spending a submission slot — this was explicit user feedback after the second submission crashed, and the notebook infrastructure built here makes that cheap (GPU quota, not a submission slot) to keep doing.
 
+**Runs 6-7 in detail** (same 10-task subset, for a clean comparison):
+- Run 6 (eval_config.yaml removed entirely): every task reached genuine completion, zero ceiling hits, 1/10 resolved. Total time 113 min (~10.6 min/task) -> extrapolated to ~120 hidden tasks, ~21.2h -- confirmed via a direct side-by-side with run 3 (89 min for 20 tasks, ~4.1 min/task, ~8.2h extrapolated) that removing the cap traded quality for a real ~2.5x throughput cost.
+- Run 7 (`max_time_minutes: 6` only, re-added after run 6's real timing data, plus the `max_output_tokens` fix): 2/10 resolved (20%, matching run 3's best rate), total time 49 min (~4.9 min/task) -> extrapolated ~9.8h, comfortably under the 12h budget. Best balance of quality and throughput seen so far.
+- Run 7 also surfaced a genuinely interesting edge case on `requests_7315`: the agent updated a pre-existing test (`test_request_url_trims_leading_path_separators` -> `test_request_url_preserves_leading_path_separators`, correctly citing the newer issue #6711 over the old #6643) because the old test asserted the exact opposite of the required fix -- objectively the right engineering call, but a direct violation of the "never touch tests" rule. The harness's anti-tampering reset-then-reapply logic broke outright on this (`git apply` failed to locate/match the file), turning an good fix into a hard verification error rather than just "test still fails". Confirms the existing rule is correct to keep as an absolute "never", since violating it even for good reason actively breaks verification, not just loses credit.
+- Also confirmed small-sample run-to-run variance is real and independent of config: `fastapi_15589` failed in run 6 but resolved in run 7 on an identical task and config (temperature 0.2 isn't fully deterministic) -- a reminder not to over-read any single n=10 comparison.
+
+**Submitted as `56752702`** (2026-10-01): this exact validated configuration (all four root-cause fixes + `max_output_tokens: 8192` + `eval_config.yaml` with only `max_time_minutes: 6`). Status `PENDING` as of submission.
+
 ## Update — first submission scored NOTHING: it timed out (2026-10-01)
 
 Checked submission `56682704`'s real status via the Kaggle API directly (`KaggleApi.competition_submissions()`), since the `kaggle competitions submissions` CLI only shows `status: COMPLETE` with blank `publicScore`/`privateScore` and hides the actual reason. The raw submission object has an `_error_description` field the CLI never surfaces:
