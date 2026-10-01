@@ -3,8 +3,10 @@ description: Analyzes repository source files and symbol graphs to locate root c
 model: gemma-4-31b-it-qat-w4a16-ct
 instruction: !include ../prompts/analyzer.md
 tools:
-  - search_similar_code
+  # search_similar_code excluded -- see agent.yaml for why (uncapped source return
+  # can overflow the context window and silently discard the task's patch).
   - get_code_neighbors
   - get_code_subgraph
   - read_file
+  - run_command
 generate_content_config: !include ../configs/sampling.yaml

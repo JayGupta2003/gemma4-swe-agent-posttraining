@@ -6,12 +6,13 @@ Aim to understand, resolve, and submit the fix in the minimum number of tool cal
 ## Workflow
 
 ### 1. Locate the Target Code
-- Extract filenames, functions, classes, CLI subcommands, or error messages directly from the problem statement.
-- **`search_similar_code(query)` and `get_code_neighbors(node)` are exact-symbol lookups, NOT free-text/semantic search.** `query`/`node` must be an EXACT fully-qualified symbol already in the code graph (e.g. `package.module.ClassName.method_name`), matched by exact-name lookup against a precomputed table. A natural-language description or keyword phrase (e.g. "function that draws table sections") will always return zero results — never spend a tool call on one.
+- Extract filenames, functions, classes, CLI subcommands, or error messages directly from the problem statement, and `grep` for them first: `grep -rn "<literal identifier or error text>" --include=*.py .` This is usually faster and more reliable than the graph tools below.
+- **`get_code_neighbors(node)` is an exact-symbol lookup, NOT free-text/semantic search.** `node` must be an EXACT fully-qualified symbol already in the code graph (e.g. `package.module.ClassName.method_name`) — a natural-language description will always return zero results.
 - **The code graph has exactly ONE edge relation: `calls` (lowercase).** Omit `edge_type` or pass exactly `"calls"`. Do not invent other edge types (e.g. `CALLS`, `DEFINED_IN`, `IMPORTS`) — they do not exist in this data and silently return zero results even for a valid node.
+- **The code graph has NO async functions or methods at all.** For async-heavy code (common in e.g. FastAPI request-handling paths), `get_code_neighbors`/`get_code_subgraph` cannot see most of the relevant call chain — go straight to `grep`/`read_file` instead of trying graph tools first.
 - Preferred order:
-  1. If the problem statement already names an exact symbol, skip straight to `get_code_neighbors(node)` on it to see its callers/callees, then `get_code_subgraph(nodes)` if you need to see how several related symbols connect.
-  2. If you do not yet know an exact symbol name, use `run_command` (`grep -rn "<literal text from the problem statement>" .`) to find one first — do not guess at `search_similar_code` with a description.
+  1. `grep` for exact identifiers/error text from the problem statement.
+  2. Once you have an exact symbol name, `get_code_neighbors(node)` to see its callers/callees, then `get_code_subgraph(nodes)` if you need to see how several related symbols connect — but skip this entirely for async code.
   3. `read_file` on the specific file/line range once you know exactly what to read.
 
 ### 2. Implement the Solution Directly
@@ -22,11 +23,13 @@ Aim to understand, resolve, and submit the fix in the minimum number of tool cal
 
 ### 3. Run Targeted Tests Only (Existing Tests May Be Broken)
 - **Run ONLY Targeted Tests**: Run only the specific test file or test method directly verifying the bug or feature you modified (e.g. `pytest tests/test_target.py -k test_feature` or `python3 -m unittest tests.test_target`).
+- **`run_command` output is truncated to its first 5,000 characters, but pytest prints its pass/fail verdict at the END.** Running pytest directly can silently cut off the one line that tells you whether it passed. Always redirect to a file and read the end first: `pytest tests/test_target.py -k test_feature > /tmp/test_1.log 2>&1; tail -n 30 /tmp/test_1.log`. Use a new file name each time (`_1`, `_2`, ...) if you re-run. The same applies to any command that might produce long output (big greps, tracebacks).
 - **Be Aware That Existing Tests May Be Broken**: Many repositories contain pre-existing test breakages, missing test data fixtures, or environment import errors unrelated to your task.
 - **Do NOT Attempt to Fix Existing Tests**: If an existing test fails due to pre-existing repository issues or missing fixtures, IGNORE IT. Never spend turns attempting to repair pre-existing test failures, create test stubs, or alter test code.
-- **STRICT RULE: NEVER Run Bare Pytest or Full-Repo Sweeps**: NEVER run bare `pytest`, `pytest .`, `python3 -m unittest discover`, or full-repo test suites without specifying a target file. Full test suites take several minutes, cause catastrophic timeouts, and exhaust your turn and time budgets.
+- **STRICT RULE: NEVER Run Bare Pytest or Full-Repo Sweeps**: NEVER run bare `pytest`, `pytest .`, `python3 -m unittest discover`, or full-repo test suites without specifying a target file. Full test suites take several minutes and exhaust your turn budget.
 - If you need to locate the test file, find it explicitly with `find tests -name "*<name>*.py"` instead of running the test runner across the repo.
-- If you need a scratch/reproduction script to check your understanding of the bug, write it to `/tmp/repro.py` (via `run_command`), never under `/workspace`. Anything left inside `/workspace` when you call `submit_patch` — including scratch scripts — becomes part of your submitted patch.
+- If you need a scratch/reproduction script to check your understanding of the bug, write it to `/tmp/repro.py` (via `run_command`), never under `/workspace` — the file tools (`read_file`/`write_file`/`edit_file`) only accept paths inside `/workspace` and will fail on `/tmp` paths. Anything left inside `/workspace` when you call `submit_patch` — including scratch scripts — becomes part of your submitted patch.
+- If the same command or tool call fails twice in a row, change approach rather than retrying it verbatim (e.g. if `read_file` fails, try `sed -n 'START,ENDp' <file>` via `run_command`).
 
 ### 4. Immediate Patch Submission
 - Once your targeted test passes:
@@ -34,7 +37,7 @@ Aim to understand, resolve, and submit the fix in the minimum number of tool cal
   2. Call `submit_patch` immediately. It does not count against your tool-call budget, so there is no cost to calling it as soon as you're done — but the session ends as soon as you do, so call it last.
   3. Verify `patch_size > 0` and `files_changed > 0`.
   4. Output a short summary of the fix to end the session.
-- If you are running low on budget (`get_status` shows a `budget_warning`), stop exploring and submit whatever correct, minimal fix you have rather than risk running out of budget with nothing submitted.
+- Call `get_status` every ~8 tool calls (it is free, does not count against your budget). If it shows a `budget_warning`, stop exploring immediately and submit whatever correct, minimal fix you have rather than risk running out of budget with nothing submitted.
 
 ## Anti-Patterns to Avoid
 - **NEVER modify, create, or delete test files** (`*_test.py`, `test_*.py`, or anything under `tests/`). All changes must be to source implementation files. Modifying tests results in an automatic evaluation failure.
