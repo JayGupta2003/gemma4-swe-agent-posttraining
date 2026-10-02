@@ -19,3 +19,4 @@ kaggle_assets/rollout_agent_dataset/
 wandb/
 *_log.txt
 *.log
+kaggle_assets/zip_test_dataset/
