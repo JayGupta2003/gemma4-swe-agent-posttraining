@@ -16,5 +16,13 @@
 # outliers (some of which still won't reach a conclusive state in time) while keeping
 # the extrapolated 120-task total under 12h with some margin for the sandbox setup
 # overhead this budget excludes (see HARNESS_README.md S7.1).
+# Lowered 6 -> 5 minutes before submission 4 (2026-10-03). Per Kaggle staff
+# (discussion #743063): the scorer runs tasks SEQUENTIALLY, reads exactly these four
+# eval_config fields, and hitting the 12h global limit currently ERRORS THE WHOLE
+# SUBMISSION. Run 7 (sequential, 6 min cap) averaged ~295s/task wall-clock including
+# setup/verification (~9.8h for 120 tasks at a 50% cap-hit rate), but if the hidden
+# set hits the cap ~100% of the time, 6 min => ~12.2h => total failure. At 5 min the
+# worst case is ~120 x ~310s = ~10.3h, so this cannot exceed the limit regardless of
+# how hard the hidden tasks are.
 evaluation:
-  max_time_minutes: 6
+  max_time_minutes: 5
