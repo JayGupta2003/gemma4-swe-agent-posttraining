@@ -20,3 +20,4 @@ wandb/
 *_log.txt
 *.log
 kaggle_assets/zip_test_dataset/
+kaggle_assets/exp1_arms_dataset/
