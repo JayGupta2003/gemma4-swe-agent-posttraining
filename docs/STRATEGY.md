@@ -1,5 +1,31 @@
 # Winning the Gemma 4 Developer Agent Competition (Main + Paper Track)
 
+## Experiment 2 RESULTS (2026-10-05): no arm met the pre-registered bar (B1 missed by one task); the two new ideas did nothing; B1's patch-writing effect now replicated
+
+48 fresh tasks, same settings as Exp1, 56-58 min per arm (3.8 h total, ~51 attempts/h). `scripts/analyze_experiment1.py <dir> exp2`.
+
+| arm | resolved | patch written | cap hit | never edits | mean s/task | 1st-edit turn / s (median) |
+|---|---|---|---|---|---|---|
+| B0 control | 19 | 25 | 27 | 22 | 280 | 9.5 / 143 |
+| B1 edit-early | **23** | **32** | 21 | 16 | 272 | 9.0 / 162 |
+| B2 + no repro first | 21 | 28 | 25 | 19 | 274 | 8.0 / 130 |
+| B3 + completeness grep | 19 | 28 | 27 | 20 | 278 | 8.0 / 140 |
+
+**Pre-registered rule, applied mechanically**: candidate = resolved >= B0+5, patch >= B0, no repo worse by >2. B1 = +4 resolved, +7 patch, worst repo +0 -> **no candidate (missed by one task)**; B2 +2 / +3 -> no; B3 +0 / +3 -> no. So nothing changes in `submission/` by the rule.
+
+**What the data says beyond the rule**
+- **B1 (edit-early) replicated its mechanism.** Paired vs B0: resolved better on 5, worse on 1 (p=0.22); patch written better on 9, worse on 2 (p=0.07); cap hits 27 -> 21; never-edit 22 -> 16. Pooled with Exp1's identical prompt (A1 vs A0, 78 paired tasks, 3 of them unwinnable requests tasks): **resolved 31 vs 25 (gained 7, lost 1, p=0.07); patch written 52 vs 40 (gained 15, lost 3, p=0.008)**. The pooling is post hoc, so treat p-values as descriptive; direction agrees in both experiments and in both repos. Effect size: about +6 tasks per 78 (~+8 points on our dev pool), real but modest, and not a step change.
+- **B2 (no repro script first) and B3 (completeness grep) did not help.** B2 lowered the repro share only slightly (patched attempts 16% -> 12%) and was -2 resolved vs B1; B3 went to +0 vs B0 and its grep share rose (34% -> 39% of calls in patched attempts). The repro-script and incomplete-fix hypotheses from the Exp1 diagnostics are not supported as prompt-level levers; they were correlations in stuck attempts, not causes.
+- **Timing is untouched**: turn latency median 4.6-5.2 s, mean ~12 s in every arm; wall time per task ~275 s in every arm (B1 slightly less). Prompts change *what* the agent does in its time, not how fast the model decodes.
+- **Task difficulty varies a lot and matters more than the prompt.** B0 solved 19/48 (40%) here vs 6/27 (22%) on the Exp1 dev set. Older tasks are far easier: fastapi older half 8/11 vs newer half 4/10; rich 5/14 vs 1/12 (task number as an age proxy; correlational). Our dev scores (20-40%) sit far above the public LB (0.12), as other teams also report, so absolute dev numbers say nothing about the hidden tasks; only paired comparisons are usable.
+- **Diversity for training data**: across the 4 arms 82 resolved attempts cover only **25 distinct tasks** (16 fastapi, 8 rich, 1 requests); 15 of them were solved by all 4 arms (easy, robust), 6 by 3, 4 by exactly 1. Rejection sampling on this pool will yield many trajectories of few, mostly easy tasks. This confirms the diversity constraint noted in the post-training plan (G2).
+- **No harness problems**: 0 `edit_file` failures in 288 calls, no undeclared-tool crashes (3 calls to our own analyzer agent tool, named `code_analyzer_agent` in traces), no errors other than the 5-minute cap.
+
+**Decisions this supports (not yet taken, user to confirm)**
+1. **Use B1 as the data-generating policy for G2.** It writes the most patches (32 vs 25 of 48) and has the lowest cap-hit and never-edit rates, so it produces the most verified trajectories per GPU hour, and the choice does not touch the submission.
+2. **Submission**: the pre-registered rule says no change. B1's confirmation-set data already exists (Exp1 A1 on those 27 tasks: +2 resolved, +5 patch written, no drop), so the only unmet condition is the discovery threshold by one task. Options: stick to the rule, or spend one slot as a probe of hidden-repo generalization. Expected leaderboard effect is small (+0.01-0.02) and invisible in the noise.
+3. **Stop prompt-only iteration**; further prompt ladders have low expected value. The remaining lever is post-training (G1 next).
+
 ## POST-TRAINING PLAN (primary focus, user decision 2026-10-04): LoRA SFT on self-generated, test-verified trajectories
 
 **Decision**: the competition is about post-training Gemma 4 31B; we have done none. The paper track only makes sense if it documents a practical implementation of the idea, so the paper will be restructured around this plan (measurement results become supporting evidence). Exp2 stays queued: it picks the best prompt, which is the policy that generates training data.
@@ -43,7 +69,7 @@
 3. *Submission policy*: no change to `submission/` without the Exp2 rule; choose the 2 finals by paired local evidence over many tasks, not by public LB; use free slots as probes of hidden-repo generalization, not as selection signal.
 4. *Cheap robustness items still worth doing (no GPU)*: (a) decide whether to declare `search_similar_code` as a harmless safety net against the undeclared-tool crash (our traces show 0 calls, but one staff fix is not confirmed live); (b) tell the model in the prompt that the workspace listing is truncated and that tool output is JSON-escaped, to copy `old_string` from `sed -n` output when an edit fails; (c) loop-breaking rule for repeated identical commands (forum: up to 69 repeats; our stuck attempts repeat 14% of calls vs 7% for resolved). These are hypotheses for the Exp2 follow-up, not changes to make now.
 
-## Experiment 2 -- prompt ladder on 48 fresh tasks (LAUNCHED 2026-10-04; kernel `noobhunterjay/gemma-4-exp2-arms`, dataset `noobhunterjay/gemma4-exp2-arms`; results pending)
+## Experiment 2 -- prompt ladder on 48 fresh tasks (RAN 2026-10-04/05; results in the section above)
 
 **Why this and not more of Exp1**: Exp1's only mechanism that worked was "edit-early" (first edit 151 s -> 102 s, never-edit 14 -> 10, resolved 8 vs 6). Its traces showed stuck attempts spend 34% of calls on repro scripts vs 21% for resolved attempts, and only 3% on edits vs 11%. The near-miss analysis showed 26% of failed patches touch fewer files than the reference fix vs 4% of resolved ones. Both point at prompt-level levers we can test without training. Thinking-off (A2/A3) is parked: it cut wall time ~22% but moved no outcome; it can be stacked later if a ladder rung wins.
 
