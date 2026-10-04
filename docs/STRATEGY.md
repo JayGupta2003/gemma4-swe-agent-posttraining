@@ -1,6 +1,6 @@
 # Winning the Gemma 4 Developer Agent Competition (Main + Paper Track)
 
-## Experiment 2 -- prompt ladder on 48 fresh tasks (PREPARED 2026-10-04, NOT YET RUN; needs one L4x4 session)
+## Experiment 2 -- prompt ladder on 48 fresh tasks (LAUNCHED 2026-10-04; kernel `noobhunterjay/gemma-4-exp2-arms`, dataset `noobhunterjay/gemma4-exp2-arms`; results pending)
 
 **Why this and not more of Exp1**: Exp1's only mechanism that worked was "edit-early" (first edit 151 s -> 102 s, never-edit 14 -> 10, resolved 8 vs 6). Its traces showed stuck attempts spend 34% of calls on repro scripts vs 21% for resolved attempts, and only 3% on edits vs 11%. The near-miss analysis showed 26% of failed patches touch fewer files than the reference fix vs 4% of resolved ones. Both point at prompt-level levers we can test without training. Thinking-off (A2/A3) is parked: it cut wall time ~22% but moved no outcome; it can be stacked later if a ladder rung wins.
 
