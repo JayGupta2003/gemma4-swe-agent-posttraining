@@ -1,6 +1,28 @@
 # Winning the Gemma 4 Developer Agent Competition (Main + Paper Track)
 
-## Experiment 1 — scaffold efficiency: make the agent produce a patch before the cap (planned & launched 2026-10-04)
+## Experiment 1 RESULTS (2026-10-04): no arm met the pre-registered bar; the mechanism findings are the real output
+
+Raw results (30 paired dev tasks, `scripts/analyze_experiment1.py`; concurrency 4, 5-min cap, temp 0.2):
+
+| arm | resolved | patch written | cap hit | mean s/task | tool calls/task | never edits | 1st-edit turn / sec (median) | turn latency med/mean/p90 s |
+|---|---|---|---|---|---|---|---|---|
+| A0 control | 6 | 15 | 18 | 288.5 | 18.7 | 14 | 9.5 / 151 | 4.7 / 11.8 / 31.2 |
+| A1 edit-early | 8 | 20 | 19 | 298.2 | 17.0 | 10 | 8.5 / 102 | 4.8 / 12.4 / 31.3 |
+| A2 think-off | 6 | 15 | 19 | 263.3 | 52.7 | 15 | 7.0 / 58 | 2.2 / 3.8 / 7.8 |
+| A3 both | 6 | 17 | 13 | 226.2 | 40.9 | 11 | 7.0 / 42 | 2.1 / 3.7 / 8.0 |
+
+**Applying the rule as written**: mechanism-confirmed needs patch-written >= control+6 (A1 got +5, A3 +2, A2 0); candidate needs resolved >= control+3 (A1 +2, A2 0, A3 0). **No arm qualifies — report "no evidence" for any resolve-rate improvement.** Paired sign tests are all non-significant (A1 resolved 2 better/0 worse p=0.50; A1 patch-written 6/1 p=0.12; A3 cap-hit 8 better/3 worse p=0.23). Honest power statement: each task is 3.3 pp on this dev set, so differences of 1-2 tasks are indistinguishable from sampling noise (we already saw identical configs differ by that much between runs), and with only 52 verified tasks total we cannot resolve small effects by re-running; further decisions must lean on mechanism evidence and risk, not on resolve counts.
+
+**Mechanism findings (large, not noise-level — thousands of turns)**:
+1. **Thinking-off cuts model latency by ~3x** (mean turn 11.8s -> 3.8s, p90 31s -> 8s) and moves the first edit from 151s to 58s — but it did NOT convert into more patches or fewer cap hits (A2: 19 cap hits vs 18). Reason found in the traces: **without thinking the agent makes 2.8x more tool calls per task (52.7 vs 18.7)**; it substitutes rapid trial-and-error actions for reasoning, so wall time per task barely moves (263s vs 288s). Thinking is not just wasted latency. The speed-up only buys a clear benefit when combined with a prompt that also pushes toward committing (A3: mean 226s/task = -22%, cap hits 13 vs 18, first edit at 42s), at no measured resolve cost (6 vs 6) — a real throughput gain for the 12h budget, though not a score gain.
+2. **Edit-early (A1) does what it says in time-to-edit** (median first edit 151s -> 102s; never-edit 14 -> 10; patch-written +5, 6 tasks better vs 1 worse) and had the best resolve count (8 vs 6), but cap hits didn't fall — and it is below our own bar, so it stays a *hypothesis worth a replication*, not a result.
+3. **Hypothesis "a hung command burns the cap" was tested and refuted**: only 1/30 tasks per arm has a single command >= 60s (same task in every arm), explaining at most 1 of ~15 cap-hit/no-patch attempts. (Setting `timeout_seconds` to ~60 is still a cheap safeguard for that one task, but it is not the lever.)
+4. **What the stuck attempts do** (pooled A0/A1/A3, 37 cap-hit-no-patch vs 20 resolved attempts): stuck attempts spend **34% of calls writing/running repro scripts (resolved: 21%)**, 39% exploring with grep/find/sed/cat, and only **3% on `edit_file` (resolved: 11%)**; exact-duplicate call rate 14% vs 7%. Correlational only, but it points at the next candidate lever: our prompt encourages reproducing the bug first, and stuck attempts over-invest in it.
+5. Suggestive but within noise: both thinking-off arms did better on `fastapi` (3/10 and 2/10 vs 1/10 control) and worse on `rich` (3/17 and 4/17 vs 5/17; A1 7/17). n=10/17, so this is a hypothesis for a larger test, not a finding.
+
+**Decision**: no change to the submitted scaffold on the strength of this experiment. The submission baseline (0.12) stands. Candidate next experiments (not yet run): (a) A4 = edit-early + "no reproduction script before your first edit" (targets finding 4), replicated against control on tasks not used here (22 unused `rich` tasks remain, but the pool is rich-heavy — growing the verified pool is the better fix); (b) a latency/time-budget-aware use of A3's -22% task time; (c) grow the verified dev pool first so that effects of ~3 tasks become detectable at all.
+
+## Experiment 1 — scaffold efficiency: make the agent produce a patch before the cap (plan, as launched 2026-10-04)
 
 **Baseline**: submission `56789021` = public 0.12 (~7 of ~60 public-LB tasks). Post-baseline priority (see the reordering rationale below): improve the scaffold before investing in fine-tuning.
 
@@ -8,7 +30,8 @@
 
 **Hypotheses**: H1 (edit-early prompt): forcing a first real edit by tool call 8 raises the patch-written rate and resolves more tasks, because the working tree is graded as-is at timeout. H2 (thinking off): removing thinking tokens cuts per-turn latency enough to fit more turns in the cap, and the quality loss is smaller than the gain. H3: they combine.
 
-**Design** (`scripts/make_experiment1.py` generates everything; notebook `kaggle_assets/exp1_arms/`; arms dataset `noobhunterjay/gemma4-exp1-arms`): four arms on the SAME 30 dev tasks (all 10 fastapi, all 3 requests, 17 `rich` drawn with a fixed seed from the 39 resolvable — no cherry-picking), one vLLM boot shared by all arms (GPU quota; arm order shuffled with a fixed seed), temperature 0.2, `max_time_minutes: 5` (exactly the submission's settings), `Evaluator.run()` at concurrency 4. Arms differ from control ONLY by: **A0_control** = current `submission/`; **A1_edit_early** = Core Objective block replaced by a hard schedule (locate <=4 calls, first `edit_file` by call 8, partial fix beats none, never revert a plausible fix); **A2_think_off** = `include_thoughts: false` (note: `thinking_budget: 0` is rejected by this harness version's schema despite the README); **A3_edit_think** = A1+A2. Verified before launch: arm diffs are exactly the intended lines (all files normalized to LF so no stray `` confound), and all four arms pass `compile_submission` locally.
+**Design** (`scripts/make_experiment1.py` generates everything; notebook `kaggle_assets/exp1_arms/`; arms dataset `noobhunterjay/gemma4-exp1-arms`): four arms on the SAME 30 dev tasks (all 10 fastapi, all 3 requests, 17 `rich` drawn with a fixed seed from the 39 resolvable — no cherry-picking), one vLLM boot shared by all arms (GPU quota; arm order shuffled with a fixed seed), temperature 0.2, `max_time_minutes: 5` (exactly the submission's settings), `Evaluator.run()` at concurrency 4. Arms differ from control ONLY by: **A0_control** = current `submission/`; **A1_edit_early** = Core Objective block replaced by a hard schedule (locate <=4 calls, first `edit_file` by call 8, partial fix beats none, never revert a plausible fix); **A2_think_off** = `include_thoughts: false` (note: `thinking_budget: 0` is rejected by this harness version's schema despite the README); **A3_edit_think** = A1+A2. Verified before launch: arm diffs are exactly the intended lines (all files normalized to LF so no stray `
+` confound), and all four arms pass `compile_submission` locally.
 
 **Metrics**: mechanism — patch-written count and time-cap-hit count (lower variance); outcome — resolved count (paired by task); diagnostics from traces — turn and elapsed time of first real edit, mean per-task seconds.
 
