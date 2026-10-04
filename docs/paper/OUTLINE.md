@@ -1,5 +1,7 @@
 # Paper outline (draft 1, 2026-10-04)
 
+> **RESTRUCTURE PENDING (2026-10-04, user decision):** the paper track only makes sense with a practical implementation of the idea. The paper will be rebuilt around the post-training pipeline in docs/STRATEGY.md ("POST-TRAINING PLAN"): rejection-sampled SFT of a LoRA adapter on the 31B, evaluated paired on held-out tasks under the 12 h budget, with the measurement results below (latency, failure families, solvability audit, noise floor) as supporting evidence. If post-training yields no gain, the paper reports the recipe, serving costs and the negative result honestly. Contribution list, ledger and schedule below are the pre-decision draft and must be revised after gate G1.
+
 Deadline: **2026-11-12 23:59 UTC** for a *submitted* (not draft) Kaggle Writeup. Plan to submit by **Nov 10**.
 Rules read from the paper-track page on 2026-10-04 (re-check before submitting; the organizers may update them):
 - Kaggle Writeup, **3,000 words maximum**, original and unpublished; non-archival (does not block other venues).
