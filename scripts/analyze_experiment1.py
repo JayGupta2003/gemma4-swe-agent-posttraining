@@ -1,7 +1,9 @@
-"""Analyze Experiment 1 (see docs/STRATEGY.md): per-arm metrics, paired comparisons vs control,
+"""Analyze Experiment 1 or 2 (see docs/STRATEGY.md): per-arm metrics, paired comparisons vs control,
 mechanism diagnostics from traces, and the pre-registered decision rule applied mechanically.
 
-Usage: python scripts/analyze_experiment1.py <dir containing exp1/<arm>/task_results.jsonl and traces/>
+Usage: python scripts/analyze_experiment1.py <dir containing <exp>/<arm>/task_results.jsonl and traces/> [exp1|exp2]
+Arms are auto-discovered; the control is the alphabetically first arm (A0_control / B0_control).
+Exp2 additionally compares each arm with the previous rung of the ladder and reports the tool-call mix.
 """
 
 from __future__ import annotations
@@ -12,7 +14,6 @@ import statistics
 import sys
 from pathlib import Path
 
-ARMS = ["A0_control", "A1_edit_early", "A2_think_off", "A3_edit_think"]
 
 
 def load_rows(arm_dir: Path) -> dict[str, dict]:
@@ -61,10 +62,47 @@ def sign_p(b: int, c: int) -> float:
     return min(1.0, 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2**n)
 
 
-def main(root: Path) -> None:
-    exp = root / "exp1"
-    data = {a: load_rows(exp / a) for a in ARMS if (exp / a / "task_results.jsonl").exists()}
-    ids = sorted(data["A0_control"])
+def call_mix(arm_dir: Path, ids: list[str]) -> dict[str, float]:
+    """Share of tool calls by kind, split by whether the attempt wrote a patch (rough, command-text heuristics)."""
+    import collections
+    mixes = {"patched": collections.Counter(), "no_patch": collections.Counter()}
+    for iid in ids:
+        p = arm_dir / "traces" / f"trace_{iid}.json"
+        if not p.exists():
+            continue
+        t = json.loads(p.read_text(encoding="utf-8"))
+        kinds = collections.Counter()
+        for s in t["steps"]:
+            for tc in (s.get("tool_calls") or []) if s.get("source") == "agent" else []:
+                fn, args = tc.get("function_name"), json.dumps(tc.get("arguments", {}))
+                if fn in ("edit_file", "write_file") and "/tmp" not in args:
+                    kinds["edit"] += 1
+                elif fn == "run_command" and ("/tmp/" in args and "python" in args or "repro" in args):
+                    kinds["repro"] += 1
+                elif fn == "run_command" and "pytest" in args:
+                    kinds["test"] += 1
+                elif fn == "run_command" and ("grep" in args or "find " in args):
+                    kinds["grep/find"] += 1
+                elif fn in ("read_file", "run_command"):
+                    kinds["read/other cmd"] += 1
+                elif fn not in ("get_status", "submit_patch"):
+                    kinds["graph/other"] += 1
+        rows_patch = (arm_dir / "task_results.jsonl").read_text(encoding="utf-8")
+        got = any(json.loads(l)["instance_id"] == iid and json.loads(l)["agent_patch_size"] > 0 for l in rows_patch.splitlines())
+        mixes["patched" if got else "no_patch"].update(kinds)
+    out = {}
+    for grp, c in mixes.items():
+        tot = sum(c.values()) or 1
+        out[grp] = {k: round(100 * v / tot) for k, v in c.most_common()}
+    return out
+
+
+def main(root: Path, exp_name: str = "exp1") -> None:
+    exp = root / exp_name
+    arms = sorted(d.name for d in exp.iterdir() if (d / "task_results.jsonl").exists())
+    ctrl = arms[0]
+    data = {a: load_rows(exp / a) for a in arms}
+    ids = sorted(data[ctrl])
     flag = lambda r, k: {"resolved": r["resolved"], "patch": r["agent_patch_size"] > 0, "cap": "session timeout" in (r["error"] or "")}[k]
 
     print(f"{'arm':14s} {'resolved':>8s} {'patch':>6s} {'capHit':>7s} {'mean_s':>7s} | {'neverEdit':>9s} {'1stEditTurn':>11s} {'1stEdit_s':>9s} | {'turnLat med/mean/p90':>22s}")
@@ -78,29 +116,52 @@ def main(root: Path) -> None:
               f"{m['turn_lat_med']:>6.1f}/{m['turn_lat_mean']:>5.1f}/{m['turn_lat_p90']:>5.1f}")
 
     print("\nPaired vs control (per task; gained/lost = arm better/worse than control; two-sided exact sign test):")
-    base = data["A0_control"]
+    base = data[ctrl]
     for a in data:
-        if a == "A0_control":
+        if a == ctrl:
             continue
         for k, better_when_true in (("resolved", True), ("patch", True), ("cap", False)):
             g = sum(1 for i in ids if (flag(data[a][i], k) != flag(base[i], k)) and (flag(data[a][i], k) == better_when_true))
             l = sum(1 for i in ids if (flag(data[a][i], k) != flag(base[i], k)) and (flag(data[a][i], k) != better_when_true))
             print(f"  {a:14s} {k:8s} better on {g:2d}, worse on {l:2d}  (sign-test p={sign_p(g, l):.2f})")
 
-    print("\nBy repo, resolved (arm: fastapi/10 requests/3 rich/17):")
+    repos = sorted({i.split("_")[0] for i in ids})
+    print("\nBy repo, resolved (" + ", ".join(f"{rp}/{sum(i.startswith(rp + '_') for i in ids)}" for rp in repos) + "):")
     for a, rows in data.items():
-        by = {p: sum(rows[i]["resolved"] for i in ids if i.startswith(p)) for p in ("fastapi", "requests", "rich")}
-        print(f"  {a:14s} {by['fastapi']}/10 {by['requests']}/3 {by['rich']}/17")
+        print(f"  {a:14s} " + " ".join(f"{sum(rows[i]['resolved'] for i in ids if i.startswith(rp + '_'))}" for rp in repos))
+
+    c_res = sum(flag(r, "resolved") for r in base.values())
+    c_patch = sum(flag(r, "patch") for r in base.values())
+    if exp_name == "exp2":
+        print("\nLADDER (each arm vs the previous rung; two-sided exact sign test):")
+        for prev, a in zip(arms, arms[1:]):
+            for k in ("resolved", "patch"):
+                g = sum(1 for i in ids if flag(data[a][i], k) and not flag(data[prev][i], k))
+                l = sum(1 for i in ids if flag(data[prev][i], k) and not flag(data[a][i], k))
+                print(f"  {prev} -> {a:14s} {k:8s} better on {g:2d}, worse on {l:2d} (p={sign_p(g, l):.2f})")
+        print("\nTool-call mix, % of calls (patched attempts vs no-patch attempts):")
+        for a in arms:
+            print(f"  {a:14s} {call_mix(exp / a, ids)}")
+        print("\nPRE-REGISTERED RULE (STRATEGY.md Experiment 2): candidate = resolved >= control+5 AND patch-written >= control "
+              "AND no repo worse than control by more than 2; a candidate must replicate on the confirmation set before any submission change.")
+        for a in arms[1:]:
+            res = sum(flag(r, "resolved") for r in data[a].values())
+            pat = sum(flag(r, "patch") for r in data[a].values())
+            worst = min(sum(data[a][i]["resolved"] for i in ids if i.startswith(rp + "_")) - sum(base[i]["resolved"] for i in ids if i.startswith(rp + "_"))
+                        for rp in repos)
+            ok = res - c_res >= 5 and pat >= c_patch and worst >= -2
+            print(f"  {a:14s} resolved {res-c_res:+d} patch {pat-c_patch:+d} worst-repo {worst:+d} -> {'CANDIDATE (confirm first)' if ok else 'no evidence'}")
+        return
 
     print("\nPRE-REGISTERED RULE (STRATEGY.md): mechanism-confirmed = patch-written >= control+6; candidate = resolved >= control+3 AND patch not lower (and a confirming 2nd round).")
-    c_res = sum(flag(r, 'resolved') for r in base.values()); c_patch = sum(flag(r, 'patch') for r in base.values())
     for a, rows in data.items():
-        if a == "A0_control":
+        if a == ctrl:
             continue
-        res = sum(flag(r, 'resolved') for r in rows.values()); pat = sum(flag(r, 'patch') for r in rows.values())
+        res = sum(flag(r, "resolved") for r in rows.values())
+        pat = sum(flag(r, "patch") for r in rows.values())
         print(f"  {a:14s} patch {pat-c_patch:+d} (need +6: {'YES' if pat-c_patch>=6 else 'no'}) | resolved {res-c_res:+d} (need +3: {'YES' if res-c_res>=3 else 'no'}) "
               f"-> {'CANDIDATE (needs round 2)' if (res-c_res>=3 and pat>=c_patch) else 'no evidence'}")
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main(Path(sys.argv[1]), sys.argv[2] if len(sys.argv) > 2 else "exp1")
