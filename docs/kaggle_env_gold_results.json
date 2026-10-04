@@ -1,0 +1,518 @@
+{
+ "fastapi_11194": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_11355": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_12942": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_13207": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_13537": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_13713": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_13786": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_13920": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14077": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14099": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14186": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14246": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14258": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14262": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14266": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14297": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14301": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14303": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14306": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14349": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14356": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14360": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14361": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14371": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14372": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14419": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14430": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14448": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14455": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14458": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14459": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14463": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14479": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14482": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14485": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14487": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14492": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14512": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14583": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14605": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14609": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14616": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14786": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14791": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14794": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14851": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14873": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14953": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14962": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14964": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14978": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_14986": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15023": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15030": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15280": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15588": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15589": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15661": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15745": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15763": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15785": {
+  "resolved": false,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_15800": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_5077": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_5624": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_9425": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_9555": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "fastapi_9753": {
+  "resolved": true,
+  "repo": "fastapi/fastapi"
+ },
+ "httpx_3672": {
+  "resolved": false,
+  "repo": "encode/httpx"
+ },
+ "requests_6589": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_6592": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_6629": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_6644": {
+  "resolved": true,
+  "repo": "psf/requests"
+ },
+ "requests_6757": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7205": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7309": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7315": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7328": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7427": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7433": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7502": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "requests_7505": {
+  "resolved": false,
+  "repo": "psf/requests"
+ },
+ "rich_2725": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_2943": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3006": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3043": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3052": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3061": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3063": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3064": {
+  "resolved": false,
+  "repo": "Textualize/rich"
+ },
+ "rich_3067": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3105": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3130": {
+  "resolved": false,
+  "repo": "Textualize/rich"
+ },
+ "rich_3180": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3278": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3296": {
+  "resolved": false,
+  "repo": "Textualize/rich"
+ },
+ "rich_3454": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3468": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3469": {
+  "resolved": false,
+  "repo": "Textualize/rich"
+ },
+ "rich_3470": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3471": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3472": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3480": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3486": {
+  "resolved": false,
+  "repo": "Textualize/rich"
+ },
+ "rich_3506": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3518": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3521": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3535": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3675": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3676": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3718": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3772": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3777": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3782": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3882": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3894": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3905": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3930": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3934": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3935": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3938": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3942": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3944": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_3953": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_4006": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_4070": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_4075": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_4076": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_4077": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ },
+ "rich_4079": {
+  "resolved": true,
+  "repo": "Textualize/rich"
+ }
+}
