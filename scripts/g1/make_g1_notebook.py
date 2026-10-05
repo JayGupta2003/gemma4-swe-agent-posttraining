@@ -19,13 +19,13 @@ HERE = Path(__file__).resolve().parent
 OUT = ROOT / "kaggle_assets" / "g1"
 OUT.mkdir(parents=True, exist_ok=True)
 
-CODE_FILES = {n: (HERE / n).read_text(encoding="utf-8").replace("\r\n", "\n") for n in ("train_g1.py", "make_adapters.py", "g1_probe.py")}
+CODE_FILES = {n: (HERE / n).read_text(encoding="utf-8").replace("\r\n", "\n") for n in ("train_g1.py", "make_adapters.py", "g1_probe.py", "g1_util.py")}
 
 SETUP = '''import json, os, re, shutil, subprocess, sys, threading, time, traceback
 from pathlib import Path
 WORK = Path('/kaggle/working'); G1 = WORK / 'g1'; CODE = G1 / 'code'; CODE.mkdir(parents=True, exist_ok=True)
 RES = G1 / 'results.json'; results = {'started': time.strftime('%Y-%m-%d %H:%M:%S')}
-BUDGET_MIN = 150
+BUDGET_MIN = 110
 def save_results(): RES.write_text(json.dumps(results, indent=1, default=str))
 def _watchdog():   # a hung stage must not burn GPU quota: hard stop (kills the kernel; /kaggle/working is kept)
     results['watchdog'] = f'fired after {BUDGET_MIN} min'; save_results(); os._exit(3)
@@ -96,20 +96,28 @@ results['A_baseline_serving'] = {'reused_from': 'g1 run 1', 'boot_s': 534,
     'cmd': '--max-model-len 32768 --gpu-memory-utilization 0.9 --tensor-parallel-size 4 --reasoning-config {...} --no-scheduler-reserve-full-isl'}
 save_results(); print('baseline reused:', results['A_baseline_serving']['decode'], results['A_baseline_serving']['kv_lines'])'''
 
-STAGE_B = '''t0 = time.time()
-env = dict(os.environ, G1_MODEL=str(MODEL_BF16), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_MAXLEN='16384', G1_MICRO='12', G1_ACC='4',
-           G1_MAXMEM=json.dumps({'0': '16GiB', '1': '16GiB', '2': '16GiB', '3': '16GiB'}), G1_TRAIN_SECONDS='1200',
-           G1_PROBES='16384,24576,32768', TOKENIZERS_PARALLELISM='false')
-try:
-    with open(G1 / 'train.log', 'w') as lf:
-        p = subprocess.run([sys.executable, str(CODE / 'train_g1.py')], env=env, stdout=lf, stderr=subprocess.STDOUT, timeout=80 * 60)
-    results['B_train_returncode'] = p.returncode
-except subprocess.TimeoutExpired:
-    results['B_train_returncode'] = 'timeout'
+STAGE_B = '''import g1_util as U
+t0 = time.time()
+STAGED = Path('/tmp/ckpt_bf16')
+try:   # /kaggle/input is NFS (~90 MB/s/stream, ~320 MB/s with 4 parallel streams; transformers' mmap reads crawled at ~6 MB/s): stage to local disk first
+    results['B_stage'] = U.stage_checkpoint(MODEL_BF16, STAGED, workers=12)
+    print('staged:', results['B_stage'])
+except Exception as e:
+    results['B_stage'] = {'error': f'{type(e).__name__}: {e}'}; print('STAGING FAILED', e)
+save_results()
+if 'error' not in results['B_stage']:
+    env = dict(os.environ, G1_MODEL=str(STAGED), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_MAXLEN='16384', G1_MICRO='12', G1_ACC='4',
+               G1_MAXMEM=json.dumps({'0': '16GiB', '1': '16GiB', '2': '16GiB', '3': '16GiB'}), G1_TRAIN_SECONDS='1200',
+               G1_PROBES='16384,24576,32768', TOKENIZERS_PARALLELISM='false')
+    # milestones: weights loaded within 10 min (local disk), first training step within 20 min of start; whole stage <= 55 min
+    results['B_run'] = U.run_supervised([sys.executable, str(CODE / 'train_g1.py')], env, G1 / 'train.log',
+                                        [('[g1] loaded in', 600), ('[g1] micro 0', 1200)], max_seconds=55 * 60)
+    print(results['B_run'])
 tm = G1 / 'train_metrics.json'
 results['B_train'] = json.loads(tm.read_text()) if tm.exists() else {'error': 'no train_metrics.json'}
 results['B_seconds'] = round(time.time() - t0); save_results()
-print(subprocess.run(f'grep "\\\\[g1\\\\]" {G1}/train.log | tail -40', shell=True, capture_output=True, text=True).stdout)
+shutil.rmtree(STAGED, ignore_errors=True)
+print(subprocess.run(f'grep -F "[g1]" {G1}/train.log | tail -40', shell=True, capture_output=True, text=True).stdout)
 b = results['B_train']; print({k: b.get(k) for k in ('stage', 'tokens_per_second', 'peak_gib_per_gpu', 'load_seconds', 'trainable_params_m', 'error')}); print('probes:', b.get('probes'))'''
 
 STAGE_C = '''t0 = time.time()
@@ -173,7 +181,7 @@ def code(s):
 
 nb = {"cells": [
     md("# G1: LoRA training + serving feasibility spike (Gemma 4 31B, L4x4)\n\nStage A baseline (reused from run 1) -> B training spike on the bf16 QAT checkpoint -> C adapter serving on the scorer's VllmServer. "
-       "Hard 150-minute watchdog. Plan and pass criteria: docs/STRATEGY.md 'POST-TRAINING PLAN'."),
+       "Hard 110-minute watchdog. Plan and pass criteria: docs/STRATEGY.md 'POST-TRAINING PLAN'."),
     code(e1.INSTALL), code(SETUP.replace("__CODE_FILES__", json.dumps(CODE_FILES))), md("## Serving helper"), code(SERVE),
     md("## Stage A: baseline serving, no adapters"), code(STAGE_A), md("## Stage B: training spike"), code(STAGE_B),
     md("## Stage C: adapter serving"), code(STAGE_C), md("## Summary and gates"), code(SUMMARY)],
