@@ -8,7 +8,7 @@ Environment variables (all strings):
   G1_DATA    jsonl of {"messages": [...]} (OpenAI-style, dict tool arguments)
   G1_OUT     output dir (metrics json, adapter_full/)
   G1_TINY    "1" = build a tiny random Gemma 4 instead of loading G1_MODEL weights
-  G1_MAXLEN  max tokens per training sequence (default 12288; the fixed system+task prompt alone is ~4-5k tokens)
+  G1_MAXLEN  max tokens per training sequence (default 16384; median trajectory is ~15.5k tokens, the fixed system+task prompt alone ~4.5k; steps down x0.75 on OOM)
   G1_RENDER  "flat" (default; plain-text tool protocol) or "native" (Gemma 4 chat-template tool format; NOT prefix-stable, see STRATEGY.md G1 notes)
   G1_MICRO   number of micro-steps (sequences) to run (default 16); G1_ACC grad-accumulation (default 4)
   G1_MAXMEM  JSON dict gpu->limit for device_map auto, e.g. {"0":"15GiB","1":"19GiB",...}
@@ -34,7 +34,7 @@ MODEL = os.environ["G1_MODEL"]
 DATA = os.environ["G1_DATA"]
 OUT = Path(os.environ["G1_OUT"])
 TINY = os.environ.get("G1_TINY") == "1"
-MAXLEN = int(os.environ.get("G1_MAXLEN", "12288"))
+MAXLEN = int(os.environ.get("G1_MAXLEN", "16384"))
 RENDER = os.environ.get("G1_RENDER", "flat")
 MICRO = int(os.environ.get("G1_MICRO", "16"))
 ACC = int(os.environ.get("G1_ACC", "4"))
@@ -84,7 +84,9 @@ def render_example(tok, msgs: list[dict]):
     for i, m in enumerate(msgs):
         if m["role"] != "assistant":
             continue
-        p, q = tmpl(msgs[:i], True), tmpl(msgs[: i + 1])
+        # NOT add_generation_prompt: the 31B template's generation prompt appends an empty thought channel that is never rendered
+        # in history, so it can never be a prefix of the rendered turn. Labels therefore also cover the `<|turn>model` header (a few tokens).
+        p, q = tmpl(msgs[:i]), tmpl(msgs[: i + 1])
         if not (q.startswith(p) and full.startswith(q)):
             return None, "template not prefix-stable"
         spans.append((len(p), len(q)))
@@ -116,14 +118,14 @@ def build_examples(tok) -> list[tuple[list[int], list[int]]]:
                 mode = "flattened"
             except Exception as e:  # noqa: BLE001
                 ex, w = None, f"flattened render failed: {type(e).__name__}: {str(e)[:80]}"
-        if ex is not None and sum(1 for x in ex[1][:MAXLEN] if x != -100) < 200:
+        if ex is not None and sum(1 for x in ex[1][:MAXLEN] if x != -100) < 200:  # must keep >= 200 label tokens inside the window
             ex, w = None, "too few label tokens inside MAXLEN"
         if ex is None:
             why[w] = why.get(w, 0) + 1
             continue
         mode_counts[mode] += 1
         ids, labels = ex
-        exs.append((ids[:MAXLEN], labels[:MAXLEN]))
+        exs.append((ids[:32768], labels[:32768]))
     res["data"] = {"rows": len(rows), "examples": len(exs), "render_modes": mode_counts, "dropped": why,
                    "tokens_median": sorted(len(i) for i, _ in exs)[len(exs) // 2] if exs else 0,
                    "label_fraction": round(sum(sum(1 for x in l if x != -100) for _, l in exs) / max(1, sum(len(i) for i, _ in exs)), 3)}
@@ -225,15 +227,19 @@ def main() -> None:
     res["stage"] = "training"
     steps, tok_total, t_train0, losses = [], 0, None, []
     t_wall0 = time.perf_counter()
+    cur_len = MAXLEN
     for k in range(MICRO):
         ids, labels = exs[k % len(exs)]
+        ids, labels = ids[:cur_len], labels[:cur_len]
         torch.cuda.synchronize() if torch.cuda.is_available() else None
         t1 = time.perf_counter()
         try:
             loss, n_tok = fwd_bwd(ids, labels)
         except torch.cuda.OutOfMemoryError:
             res.setdefault("oom_events", []).append({"micro": k, "tokens": len(ids)})
-            log("OOM at micro", k, "tokens", len(ids))
+            cur_len = int(cur_len * 0.75)
+            res["final_train_len"] = cur_len
+            log("OOM at micro", k, "tokens", len(ids), "-> next sequences capped at", cur_len)
             opt.zero_grad(set_to_none=True)
             torch.cuda.empty_cache()
             save()

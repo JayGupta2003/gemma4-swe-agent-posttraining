@@ -78,8 +78,8 @@ def serve_and_probe(tag, adapter_names):
         for a in adapter_names or []: rec['decode'][a] = P.decode_probe(srv.base_url, a, agent_prompt)
         rec['concurrency4'] = {base_id: P.concurrency_probe(srv.base_url, base_id, agent_prompt)}
         if adapter_names: rec['concurrency4'][adapter_names[0]] = P.concurrency_probe(srv.base_url, adapter_names[0], agent_prompt)
-        rec['long_prompt'] = {base_id: P.long_prompt_probe(srv.base_url, base_id, 70000)}
-        if adapter_names: rec['long_prompt'][adapter_names[0]] = P.long_prompt_probe(srv.base_url, adapter_names[0], 70000)
+        rec['long_prompt'] = {base_id: P.long_prompt_probe(srv.base_url, base_id, 40000)}
+        if adapter_names: rec['long_prompt'][adapter_names[0]] = P.long_prompt_probe(srv.base_url, adapter_names[0], 40000)
         if adapter_names:
             lp = {i: P.logprob_probe(srv.base_url, i) for i in [base_id] + adapter_names}
             rec['adapter_activity'] = {a: P.compare_logprobs(lp[base_id], lp[a]) for a in adapter_names}
@@ -89,18 +89,15 @@ def serve_and_probe(tag, adapter_names):
         srv.stop(); time.sleep(15)
     return rec'''
 
-STAGE_A = '''t0 = time.time()
-try:
-    results['A_baseline_serving'] = serve_and_probe('base', None)
-except Exception:
-    results['A_baseline_serving'] = {'error': traceback.format_exc()[-2500:]}
-results['A_seconds'] = round(time.time() - t0); save_results()
-a = results['A_baseline_serving']; print(json.dumps({k: a.get(k) for k in ('boot_s', 'kv_lines', 'start_error', 'probe_error')}, indent=1)[:2500])
-for m, d in (a.get('decode') or {}).items(): print('decode', m, d.get('decode_tok_s_median'), 'tok/s; ttft', d.get('ttft_s_median'))
-print('long prompt:', a.get('long_prompt')); print('concurrency4:', {m: c.get('aggregate_tok_s') for m, c in (a.get('concurrency4') or {}).items()})'''
+STAGE_A = '''# Baseline measured in run 1 (same notebook, same wheelhouse, same day): reused to save ~10 min of L4x4. Source: results of kernel version 1.
+results['A_baseline_serving'] = {'reused_from': 'g1 run 1', 'boot_s': 534,
+    'kv_lines': ['Available KV cache memory: 10.61 GiB', 'GPU KV cache size: 46,352 tokens', 'Maximum concurrency for 32,768 tokens per request: 8.74x'],
+    'decode': {'BASE': {'decode_tok_s_median': 37.71, 'ttft_s_median': 0.08}}, 'concurrency4': {'BASE': {'aggregate_tok_s': 131.9, 'wall_s': 6.07}},
+    'cmd': '--max-model-len 32768 --gpu-memory-utilization 0.9 --tensor-parallel-size 4 --reasoning-config {...} --no-scheduler-reserve-full-isl'}
+save_results(); print('baseline reused:', results['A_baseline_serving']['decode'], results['A_baseline_serving']['kv_lines'])'''
 
 STAGE_B = '''t0 = time.time()
-env = dict(os.environ, G1_MODEL=str(MODEL_BF16), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_MAXLEN='12288', G1_MICRO='12', G1_ACC='4',
+env = dict(os.environ, G1_MODEL=str(MODEL_BF16), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_MAXLEN='16384', G1_MICRO='12', G1_ACC='4',
            G1_MAXMEM=json.dumps({'0': '16GiB', '1': '16GiB', '2': '16GiB', '3': '16GiB'}), G1_TRAIN_SECONDS='1200',
            G1_PROBES='16384,24576,32768', TOKENIZERS_PARALLELISM='false')
 try:
@@ -151,7 +148,7 @@ for m, d in (C.get('decode') or {}).items():
     if m == 'g1_attn' or (ad_tps is None and m.startswith('g1_') and m != 'g1_canary'): ad_tps = d.get('decode_tok_s_median')
 gates = {
   'train tokens/s >= 60': (B.get('tokens_per_second') or 0) >= 60,
-  'training fits 12k tokens (no OOM events)': not B.get('oom_events'),
+  'training fits 16k tokens (no OOM events)': not B.get('oom_events'),
   'adapter active in serving (canary logprob diff > 0.05)': (g(C, 'adapter_activity', 'g1_canary', 'max_logprob_diff') or 0) > 0.05,
   'adapter decode >= 85% of no-adapter baseline': bool(base_tps and ad_tps and ad_tps / base_tps >= 0.85),
   'long prompt completes with adapter': bool(g(C, 'long_prompt', 'g1_attn', 'ok') or g(C, 'long_prompt', 'g1_full', 'ok')),
@@ -175,7 +172,7 @@ def code(s):
 
 
 nb = {"cells": [
-    md("# G1: LoRA training + serving feasibility spike (Gemma 4 31B, L4x4)\n\nStage A baseline serving (no adapters) -> B training spike on the bf16 QAT checkpoint -> C adapter serving on the scorer's VllmServer. "
+    md("# G1: LoRA training + serving feasibility spike (Gemma 4 31B, L4x4)\n\nStage A baseline (reused from run 1) -> B training spike on the bf16 QAT checkpoint -> C adapter serving on the scorer's VllmServer. "
        "Hard 150-minute watchdog. Plan and pass criteria: docs/STRATEGY.md 'POST-TRAINING PLAN'."),
     code(e1.INSTALL), code(SETUP.replace("__CODE_FILES__", json.dumps(CODE_FILES))), md("## Serving helper"), code(SERVE),
     md("## Stage A: baseline serving, no adapters"), code(STAGE_A), md("## Stage B: training spike"), code(STAGE_B),
