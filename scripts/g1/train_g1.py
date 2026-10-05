@@ -25,6 +25,9 @@ import traceback
 from pathlib import Path
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+# Kaggle's image ships torchao 0.10.0, which peft 0.19.1 rejects with an ImportError while attaching LoRA layers (run 3 failure).
+# We do not use torchao, so hide it: importlib.util.find_spec() returns None for a sys.modules entry of None.
+sys.modules["torchao"] = None
 import torch
 import torch.nn.functional as F
 import transformers
