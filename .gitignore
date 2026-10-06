@@ -23,3 +23,5 @@ kaggle_assets/zip_test_dataset/
 kaggle_assets/exp1_arms_dataset/
 kaggle_assets/exp2_arms_dataset/
 kaggle_assets/g1_data_dataset/
+.venv_g1/
+.venv_g1/

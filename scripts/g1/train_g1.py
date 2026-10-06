@@ -13,7 +13,8 @@ Environment variables (all strings):
   G1_MICRO   number of micro-steps (sequences) to run (default 16); G1_ACC grad-accumulation (default 4)
   G1_MAXMEM  JSON dict gpu->limit for device_map auto, e.g. {"0":"15GiB","1":"19GiB",...}
   G1_TRAIN_SECONDS  stop training after this many seconds (default 1500)
-  G1_PROBES  comma list of long sequence lengths to probe fwd+bwd memory at (default 16384,24576,32768)
+  G1_ATTN    "chunked" (default) or "stock"; G1_DIAG lengths for the stock-vs-chunked memory diagnostic (default 2048,3072,4096)
+  G1_LADDER  ascending lengths for the memory/throughput ladder (default 4096..32768); training then runs at the largest OK length <= G1_MAXLEN
 """
 
 import json
@@ -33,6 +34,9 @@ import torch.nn.functional as F
 import transformers
 from transformers import AutoTokenizer
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gemma4_memfix as MF
+
 MODEL = os.environ["G1_MODEL"]
 DATA = os.environ["G1_DATA"]
 OUT = Path(os.environ["G1_OUT"])
@@ -43,7 +47,9 @@ MICRO = int(os.environ.get("G1_MICRO", "16"))
 ACC = int(os.environ.get("G1_ACC", "4"))
 MAXMEM = json.loads(os.environ.get("G1_MAXMEM", "null"))
 TRAIN_SECONDS = float(os.environ.get("G1_TRAIN_SECONDS", "1500"))
-PROBES = [int(x) for x in os.environ.get("G1_PROBES", "16384,24576,32768").split(",") if x]
+ATTN = os.environ.get("G1_ATTN", "chunked")  # chunked (memory-bounded, scripts/g1/gemma4_memfix.py) | stock (sdpa)
+LADDER = [int(x) for x in os.environ.get("G1_LADDER", "4096,8192,12288,16384,20480,24576,32768").split(",") if x]
+DIAG = [int(x) for x in os.environ.get("G1_DIAG", "2048,3072,4096").split(",") if x]  # stock-vs-chunked memory comparison lengths
 TARGET_RE = r".*language_model\.layers\.\d+\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))"
 
 OUT.mkdir(parents=True, exist_ok=True)
@@ -139,6 +145,8 @@ def build_examples(tok) -> list[tuple[list[int], list[int]]]:
 # ---------------------------------------------------------------- model
 def load_model():
     cls = getattr(transformers, "Gemma4ForConditionalGeneration", None) or transformers.AutoModelForImageTextToText
+    if ATTN == "chunked":
+        MF.install()
     if TINY:
         from transformers import Gemma4Config, Gemma4TextConfig
         t = Gemma4TextConfig(vocab_size=262144, hidden_size=64, intermediate_size=128, num_hidden_layers=6, num_attention_heads=4,
@@ -147,8 +155,8 @@ def load_model():
                              hidden_size_per_layer_input=0, num_kv_shared_layers=0, use_double_wide_mlp=False, max_position_embeddings=65536)
         cfg = Gemma4Config(text_config=t.to_dict(), vision_config=dict(hidden_size=32, intermediate_size=64, num_hidden_layers=1,
                            num_attention_heads=2, num_key_value_heads=2, head_dim=16, global_head_dim=16), audio_config=None)
-        return cls(cfg).to(torch.bfloat16).to("cuda:0" if torch.cuda.is_available() else "cpu")
-    kw = dict(dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
+        return cls._from_config(cfg, attn_implementation=MF.ATTN_NAME if ATTN == "chunked" else "sdpa").to(torch.bfloat16).to("cuda:0" if torch.cuda.is_available() else "cpu")
+    kw = dict(dtype=torch.bfloat16, device_map="auto", attn_implementation=MF.ATTN_NAME if ATTN == "chunked" else "sdpa")
     if MAXMEM:
         kw["max_memory"] = {int(k): v for k, v in MAXMEM.items()}
     return cls.from_pretrained(MODEL, **kw)
@@ -196,10 +204,16 @@ def main() -> None:
             logits = torch.tanh(logits / softcap) * softcap
         return F.cross_entropy(logits, tgt, reduction="sum")
 
+    def peak_max() -> float:
+        if not torch.cuda.is_available():
+            return 0.0
+        return round(max(torch.cuda.max_memory_allocated(i) for i in range(torch.cuda.device_count())) / 2**30, 2)
+
     def fwd_bwd(ids: list[int], labels: list[int]):
+        """One micro-step. Returns (loss, n_tokens, peak GiB right after the forward pass)."""
         pos = [t for t in range(len(ids) - 1) if labels[t + 1] != -100]
         if not pos:
-            return None, 0
+            return None, 0, 0.0
         x = torch.tensor([ids], device=dev)
         for attempt in range(2):
             try:
@@ -213,36 +227,117 @@ def main() -> None:
                     log("retrying with token_type_ids")
                     continue
                 raise
+        fwd_peak = peak_max()
         hd = lm_head.weight.device
         h_sel = hs[torch.tensor(pos, device=hs.device)].to(hd)
         tgt = torch.tensor([ids[t + 1] for t in pos], device=hd)
-        total = 0.0
         loss = None
         for a in range(0, len(pos), CH):
             part = checkpoint(chunk_loss, h_sel[a:a + CH], tgt[a:a + CH], use_reentrant=False)
             loss = part if loss is None else loss + part
         loss = loss / len(pos)
         (loss / ACC).backward()
-        return float(loss.detach()), len(ids)
+        return float(loss.detach()), len(ids), fwd_peak
 
-    for i in range(torch.cuda.device_count()):
-        torch.cuda.reset_peak_memory_stats(i)
-    res["stage"] = "training"
-    steps, tok_total, t_train0, losses = [], 0, None, []
-    t_wall0 = time.perf_counter()
-    cur_len = MAXLEN
-    for k in range(MICRO):
-        ids, labels = exs[k % len(exs)]
-        ids, labels = ids[:cur_len], labels[:cur_len]
-        torch.cuda.synchronize() if torch.cuda.is_available() else None
+    def set_impl(name: str) -> None:
+        try:
+            model.set_attn_implementation(name)
+        except Exception:  # noqa: BLE001
+            for c in (model.config, model.config.get_text_config()):
+                c._attn_implementation = name
+
+    def seq_of_len(L: int):
+        ids, labels = [], []
+        for e_ids, e_lab in sorted(exs, key=lambda e: -len(e[0])):  # longest examples first; concatenated if one is too short
+            ids += e_ids
+            labels += e_lab
+            if len(ids) >= L:
+                break
+        return ids[:L], labels[:L]
+
+    def measure(L: int, tag: str) -> dict:
+        ids, labels = seq_of_len(L)
+        if not any(x != -100 for x in labels[1:]):  # short windows lie inside the prompt (no labels): put labels on the last quarter
+            q = L - L // 4
+            labels = [-100] * q + ids[q:]
+        MF.calls["attn"] = MF.calls["mlp"] = 0
+        for i in range(torch.cuda.device_count()):
+            torch.cuda.reset_peak_memory_stats(i)
+        base = [torch.cuda.memory_allocated(i) / 2**30 for i in range(torch.cuda.device_count())]
         t1 = time.perf_counter()
         try:
-            loss, n_tok = fwd_bwd(ids, labels)
+            _loss, n, fwd_peak = fwd_bwd(ids, labels)
+            torch.cuda.synchronize()
+            dt = time.perf_counter() - t1
+            r = {"tag": tag, "len": L, "ok": True, "seconds": round(dt, 1), "tokens_per_second": round(n / dt, 1),
+                 "chunked_attn_calls": MF.calls["attn"], "chunked_mlp_calls": MF.calls["mlp"],
+                 "fwd_peak_gib_max_gpu": fwd_peak, "peak_gib_per_gpu": gpu_peaks(),
+                 "above_weights_gib_per_gpu": [round(p - b, 2) for p, b in zip(gpu_peaks(), base)]}
+        except torch.cuda.OutOfMemoryError:
+            r = {"tag": tag, "len": L, "ok": False, "error": "OOM", "peak_gib_per_gpu": gpu_peaks(),
+                 "chunked_attn_calls": MF.calls["attn"], "chunked_mlp_calls": MF.calls["mlp"]}
+        opt.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
+        log("measure", r)
+        return r
+
+    # ---- diagnostic: stock sdpa vs chunked attention at cheap lengths (which one explains the run-4 OOM at ~5k tokens?)
+    res["stage"] = "diagnostic"
+    res["diag"] = []
+    if DIAG:
+        if ATTN == "chunked":
+            for impl, name in (("stock", "sdpa"), ("chunked", MF.ATTN_NAME)):
+                set_impl(name)
+                if impl == "stock":
+                    MF.uninstall_mlp_patch()
+                else:
+                    MF.install()
+                for L in DIAG:
+                    res["diag"].append(measure(L, impl))
+                    save()
+                    if not res["diag"][-1]["ok"]:
+                        break
+            MF.install()
+            set_impl(MF.ATTN_NAME)
+        else:
+            for L in DIAG:
+                res["diag"].append(measure(L, "stock"))
+                save()
+
+    # ---- memory/throughput ladder with the configured attention
+    res["stage"] = "ladder"
+    res["probes"] = []
+    best = 0
+    for L in LADDER:
+        r = measure(L, ATTN)
+        res["probes"].append(r)
+        save()
+        if not r["ok"]:
+            break
+        best = L
+    train_len = min(best, MAXLEN)
+    res["largest_ok_len"] = best
+    res["train_len"] = train_len
+    log("largest OK length", best, "-> training at", train_len)
+
+    # ---- training steps at the largest feasible length (skipped if the prompt alone does not fit: no label tokens)
+    res["stage"] = "training"
+    steps, tok_total, t_train0 = [], 0, None
+    t_wall0 = time.perf_counter()
+    usable = [(i[:train_len], l[:train_len]) for i, l in exs if sum(1 for x in l[:train_len] if x != -100) >= 200]
+    res["train_examples_usable_at_len"] = len(usable)
+    if train_len < 6000 or not usable:
+        res["training_skipped"] = f"largest feasible length {train_len} leaves no usable examples (prompt alone is ~4.5k tokens)"
+        log(res["training_skipped"])
+    for k in range(MICRO if usable and train_len >= 6000 else 0):
+        ids, labels = usable[k % len(usable)]
+        torch.cuda.synchronize()
+        t1 = time.perf_counter()
+        try:
+            loss, n_tok, _fp = fwd_bwd(ids, labels)
         except torch.cuda.OutOfMemoryError:
             res.setdefault("oom_events", []).append({"micro": k, "tokens": len(ids)})
-            cur_len = int(cur_len * 0.75)
-            res["final_train_len"] = cur_len
-            log("OOM at micro", k, "tokens", len(ids), "-> next sequences capped at", cur_len)
+            log("OOM at micro", k, "tokens", len(ids))
             opt.zero_grad(set_to_none=True)
             torch.cuda.empty_cache()
             save()
@@ -251,13 +346,12 @@ def main() -> None:
             torch.nn.utils.clip_grad_norm_([p for p in pm.parameters() if p.requires_grad], 1.0)
             opt.step()
             opt.zero_grad(set_to_none=True)
-        torch.cuda.synchronize() if torch.cuda.is_available() else None
+        torch.cuda.synchronize()
         dt = time.perf_counter() - t1
         if k == 0:
             t_train0 = time.perf_counter()  # exclude warm-up from throughput
         else:
             tok_total += n_tok
-        losses.append(loss)
         steps.append({"micro": k, "tokens": n_tok, "seconds": round(dt, 2), "loss": None if loss is None else round(loss, 4)})
         el = (time.perf_counter() - t_train0) if t_train0 else 0
         res.update({"steps": steps, "tokens_per_second": round(tok_total / el, 1) if el > 0 else None, "peak_gib_per_gpu": gpu_peaks()})
@@ -266,33 +360,6 @@ def main() -> None:
         if time.perf_counter() - t_wall0 > TRAIN_SECONDS:
             res["stopped_by_time_budget"] = True
             break
-
-    # long-sequence headroom (fwd+bwd, no optimizer step)
-    base_ids = [t for ids, _ in exs for t in ids]
-    res["probes"] = []
-    for L in PROBES:
-        if L > len(base_ids):
-            reps = (L // len(base_ids)) + 1
-            seq = (base_ids * reps)[:L]
-        else:
-            seq = base_ids[:L]
-        labels = [-100] * (L - min(2000, L // 4)) + seq[L - min(2000, L // 4):]
-        for i in range(torch.cuda.device_count()):
-            torch.cuda.reset_peak_memory_stats(i)
-        t1 = time.perf_counter()
-        try:
-            fwd_bwd(seq, labels)
-            torch.cuda.synchronize() if torch.cuda.is_available() else None
-            res["probes"].append({"len": L, "ok": True, "seconds": round(time.perf_counter() - t1, 1), "peak_gib_per_gpu": gpu_peaks()})
-        except torch.cuda.OutOfMemoryError:
-            res["probes"].append({"len": L, "ok": False, "error": "OOM", "peak_gib_per_gpu": gpu_peaks()})
-            opt.zero_grad(set_to_none=True)
-            torch.cuda.empty_cache()
-            save()
-            break
-        opt.zero_grad(set_to_none=True)
-        save()
-        log("probe", res["probes"][-1])
 
     res["stage"] = "saving"
     pm.save_pretrained(str(OUT / "adapter_full"))
