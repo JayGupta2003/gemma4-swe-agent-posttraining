@@ -22,7 +22,7 @@ class _WD:  # watchdog stub
 _wd = _WD()
 os.environ.update(G1_TINY="1", G1_TEST_MEMFRAC="0.25")
 stage_b = stage_b.replace("STAGED = Path('/tmp/ckpt_bf16')", f"STAGED = Path(r'{tmp / 'ckpt'}')")
-stage_b = stage_b.replace("G1_TRAIN_LEN='8192'", "G1_TRAIN_LEN='6500'").replace("G1_LADDER='10240,12288,14336,16384,20480'", "G1_LADDER='9000,16000'")
+stage_b = stage_b.replace("G1_TRAIN_LEN='12288'", "G1_TRAIN_LEN='6500'").replace("G1_LADDER='14336,16384,18432,20480,24576'", "G1_LADDER='9000,16000'")
 stage_b = stage_b.replace("G1_MICRO='6'", "G1_MICRO='4'")
 g = dict(globals())
 exec(stage_b, g)

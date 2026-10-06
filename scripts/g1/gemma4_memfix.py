@@ -93,3 +93,106 @@ def uninstall_mlp_patch() -> None:
     if getattr(mg.Gemma4TextMLP, "_g1_chunked", False):
         mg.Gemma4TextMLP.forward = mg.Gemma4TextMLP._g1_orig_forward
         mg.Gemma4TextMLP._g1_chunked = False
+
+
+# =====================================================================================================================
+# Sequence-chunked decoder layer (G1d). Everything in a Gemma 4 layer is token-wise EXCEPT attention itself, so a layer can be
+# processed in chunks of query positions with each chunk checkpointed. The big fp32 temporaries of RMSNorm / q-norm / RoPE / MLP
+# then scale with the chunk instead of the whole sequence. Sliding layers recompute the K/V of their window per chunk (cheap);
+# global layers compute K/V once (checkpointed in token chunks; only ~[T, 2048] per tensor to keep).
+# Valid for the 31B config: no per-layer inputs, no MoE, no KV sharing, batch 1, no cache. Anything else falls back to stock.
+# =====================================================================================================================
+_lcfg = {"chunk_sliding": 1024, "chunk_global": 256, "kv_chunk": 2048, "min_len": 2048}
+
+
+def _kv(layer, h, cos, sin):
+    from transformers.models.gemma4.modeling_gemma4 import apply_rotary_pos_emb
+    a = layer.self_attn
+    x = layer.input_layernorm(h)
+    shape = (*x.shape[:-1], -1, a.head_dim)
+    k_raw = a.k_proj(x).view(shape)
+    v_raw = a.v_proj(x).view(shape) if a.v_proj is not None else k_raw   # k_eq_v layers: value = raw (pre-norm) key projection
+    k = apply_rotary_pos_emb(a.k_norm(k_raw), cos, sin, unsqueeze_dim=2).transpose(1, 2)
+    v = a.v_norm(v_raw).transpose(1, 2)
+    return k, v
+
+
+def _tail(layer, h_c, cos_c, sin_c, K, V, q0, k0):
+    """The whole layer for the query tokens h_c (positions q0..q0+c): attention against K/V (positions k0..) + MLP, exactly as stock."""
+    from transformers.models.gemma4.modeling_gemma4 import apply_rotary_pos_emb
+    a = layer.self_attn
+    c = h_c.shape[1]
+    x = layer.input_layernorm(h_c)
+    q = apply_rotary_pos_emb(a.q_norm(a.q_proj(x).view(1, c, -1, a.head_dim)), cos_c, sin_c, unsqueeze_dim=2).transpose(1, 2)  # [1,H,c,hd]
+    H, Hkv = q.shape[1], K.shape[1]
+    o = _block(q.reshape(1, Hkv, H // Hkv, c, q.shape[-1]), K, V, q0, k0, a.scaling, a.sliding_window)
+    o = a.o_proj(o.reshape(1, H, c, -1).transpose(1, 2).reshape(1, c, -1))
+    h = h_c + layer.post_attention_layernorm(o)
+    h = h + layer.post_feedforward_layernorm(layer.mlp(layer.pre_feedforward_layernorm(h)))
+    return h * layer.layer_scalar
+
+
+def _chunk_sliding(layer, h_kv, cos_kv, sin_kv, q0, k0):
+    off = q0 - k0
+    K, V = _kv(layer, h_kv, cos_kv, sin_kv)
+    return _tail(layer, h_kv[:, off:], cos_kv[:, off:], sin_kv[:, off:], K, V, q0, k0)
+
+
+def _chunk_global(layer, h_c, cos_c, sin_c, K, V, q0):
+    b = q0 + h_c.shape[1]
+    return _tail(layer, h_c, cos_c, sin_c, K[:, :, :b], V[:, :, :b], q0, 0)
+
+
+def _layer_forward(self, hidden_states, per_layer_input=None, shared_kv_states=None, position_embeddings=None, attention_mask=None,
+                   position_ids=None, past_key_values=None, **kwargs):
+    B, T, _ = hidden_states.shape
+    a = self.self_attn
+    if (B != 1 or T < _lcfg["min_len"] or past_key_values is not None or not torch.is_grad_enabled() or self.enable_moe_block
+            or self.hidden_size_per_layer_input or a.is_kv_shared_layer):
+        return type(self)._g1_orig_forward(self, hidden_states, per_layer_input, shared_kv_states, position_embeddings, attention_mask,
+                                           position_ids, past_key_values, **kwargs)
+    calls["layer"] += 1
+    cos, sin = position_embeddings
+    h = hidden_states
+    outs = []
+    if a.sliding_window:
+        ch, w = _lcfg["chunk_sliding"], a.sliding_window
+        for q0 in range(0, T, ch):
+            b, k0 = min(q0 + ch, T), max(0, q0 - w + 1)
+            outs.append(checkpoint(_chunk_sliding, self, h[:, k0:b], cos[:, k0:b], sin[:, k0:b], q0, k0, use_reentrant=False))
+    else:
+        ks, vs = [], []
+        for t0 in range(0, T, _lcfg["kv_chunk"]):
+            t1 = min(t0 + _lcfg["kv_chunk"], T)
+            k, v = checkpoint(_kv, self, h[:, t0:t1], cos[:, t0:t1], sin[:, t0:t1], use_reentrant=False)
+            ks.append(k)
+            vs.append(v)
+        K, V = torch.cat(ks, dim=2), torch.cat(vs, dim=2)
+        ch = _lcfg["chunk_global"]
+        for q0 in range(0, T, ch):
+            b = min(q0 + ch, T)
+            outs.append(checkpoint(_chunk_global, self, h[:, q0:b], cos[:, q0:b], sin[:, q0:b], K, V, q0, use_reentrant=False))
+    return torch.cat(outs, dim=1)
+
+
+calls["layer"] = 0
+
+
+def install_layers(chunk_sliding: int = 1024, chunk_global: int = 256, kv_chunk: int = 2048, min_len: int = 2048) -> None:
+    """Replace Gemma4TextDecoderLayer.forward by the sequence-chunked version (use with HF gradient checkpointing DISABLED:
+    the chunks are the checkpoints)."""
+    from transformers.models.gemma4 import modeling_gemma4 as mg
+    _lcfg.update(chunk_sliding=chunk_sliding, chunk_global=chunk_global, kv_chunk=kv_chunk, min_len=min_len)
+    L = mg.Gemma4TextDecoderLayer
+    if not getattr(L, "_g1_layer_chunked", False):
+        L._g1_orig_forward = L.forward
+        L.forward = _layer_forward
+        L._g1_layer_chunked = True
+
+
+def uninstall_layers() -> None:
+    from transformers.models.gemma4 import modeling_gemma4 as mg
+    L = mg.Gemma4TextDecoderLayer
+    if getattr(L, "_g1_layer_chunked", False):
+        L.forward = L._g1_orig_forward
+        L._g1_layer_chunked = False

@@ -13,7 +13,8 @@ Environment variables (all strings):
   G1_MICRO   number of micro-steps (sequences) to run (default 16); G1_ACC grad-accumulation (default 4)
   G1_MAXMEM  JSON dict gpu->limit for device_map auto, e.g. {"0":"15GiB","1":"19GiB",...}
   G1_TRAIN_SECONDS  stop training after this many seconds (default 1500)
-  G1_OFFLOAD "1" (default) offloads saved layer-boundary activations to pinned CPU RAM (reentrant checkpointing + save_on_cpu)
+  G1_LAYERCHUNK "1" (default): sequence-chunked decoder layers, HF gradient checkpointing OFF (the chunks are the checkpoints); "0" = stock layers
+  G1_OFFLOAD "1" offloads saved layer-boundary activations to pinned CPU RAM (reentrant checkpointing + save_on_cpu)
   G1_ATTN    "stock" (default, sdpa) or "chunked"; G1_DIAG lengths for the stock-vs-chunked memory diagnostic (default 2048,3072,4096)
   G1_TRAIN_LEN training sequence length (default 8192); training runs FIRST, then the ladder probes ascending lengths until the first OOM (G1_MICRO=0 skips training)
 """
@@ -49,18 +50,19 @@ RENDER = os.environ.get("G1_RENDER", "flat")
 MICRO = int(os.environ.get("G1_MICRO", "16"))
 ACC = int(os.environ.get("G1_ACC", "4"))
 MAXMEM = json.loads(os.environ.get("G1_MAXMEM", "null"))
-TRAIN_LEN = int(os.environ.get("G1_TRAIN_LEN", "8192"))  # training length (default 8192: known to fit in G1 run 5)
-OFFLOAD = os.environ.get("G1_OFFLOAD", "1") == "1"   # reentrant checkpointing + save_on_cpu: layer-boundary activations live in pinned host RAM
+LAYERCHUNK = os.environ.get("G1_LAYERCHUNK", "1") == "1"  # sequence-chunked decoder layers (scripts/g1/gemma4_memfix.py); replaces HF layer checkpointing
+TRAIN_LEN = int(os.environ.get("G1_TRAIN_LEN", "12288"))  # training length (G1 run 6: 8192 fits with stock layers; 12288 expected with chunked layers)
+OFFLOAD = os.environ.get("G1_OFFLOAD", "0") == "1"   # reentrant checkpointing + save_on_cpu: layer-boundary activations live in pinned host RAM
 TEST_MEMFRAC = os.environ.get("G1_TEST_MEMFRAC")  # local test only: cap GPU memory to force an OOM
 NO_CLEANUP = os.environ.get("G1_TEST_NO_CLEANUP") == "1"  # local test only: reproduce the leak after an OOM
 TRAIN_SECONDS = float(os.environ.get("G1_TRAIN_SECONDS", "1500"))
 ATTN = os.environ.get("G1_ATTN", "stock")  # chunked (memory-bounded, scripts/g1/gemma4_memfix.py) | stock (sdpa)
-LADDER = [int(x) for x in os.environ.get("G1_LADDER", "6144,8192,10240,12288,14336,16384,20480").split(",") if x]
+LADDER = [int(x) for x in os.environ.get("G1_LADDER", "14336,16384,18432,20480,24576").split(",") if x]
 DIAG = [int(x) for x in os.environ.get("G1_DIAG", "").split(",") if x]  # stock-vs-chunked memory comparison lengths
 TARGET_RE = r".*language_model\.layers\.\d+\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))"
 
 OUT.mkdir(parents=True, exist_ok=True)
-res: dict = {"stage": "start", "tiny": TINY, "maxlen": MAXLEN, "torch": torch.__version__, "transformers": transformers.__version__,
+res: dict = {"stage": "start", "tiny": TINY, "layerchunk": LAYERCHUNK, "offload": OFFLOAD, "maxlen": MAXLEN, "torch": torch.__version__, "transformers": transformers.__version__,
              "n_gpus": torch.cuda.device_count()}
 
 
@@ -153,6 +155,8 @@ def build_examples(tok) -> list[tuple[list[int], list[int]]]:
 def load_model():
     cls = getattr(transformers, "Gemma4ForConditionalGeneration", None) or transformers.AutoModelForImageTextToText
     MF.install()  # registers chunked attention + patches the MLP (exact); attention only used if G1_ATTN=chunked
+    if LAYERCHUNK:
+        MF.install_layers(chunk_sliding=1024, chunk_global=128)
     if TINY:
         from transformers import Gemma4Config, Gemma4TextConfig
         t = Gemma4TextConfig(vocab_size=262144, hidden_size=64, intermediate_size=128, num_hidden_layers=6, num_attention_heads=4,
@@ -186,8 +190,11 @@ def main() -> None:
         torch.cuda.set_per_process_memory_fraction(float(TEST_MEMFRAC))
     from peft import LoraConfig, get_peft_model
     model.config.use_cache = False
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": OFFLOAD})
-    model.enable_input_require_grads()
+    if LAYERCHUNK:
+        log("sequence-chunked layers: HF gradient checkpointing left OFF (chunks are checkpointed)")
+    else:
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": OFFLOAD})
+        model.enable_input_require_grads()
     pm = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0, bias="none", target_modules=TARGET_RE, task_type="CAUSAL_LM"))
     n_tr = sum(p.numel() for p in pm.parameters() if p.requires_grad)
     res["trainable_params_m"] = round(n_tr / 1e6, 1)
@@ -383,7 +390,7 @@ def main() -> None:
     res["probes"] = []
     best = 0
     for L in LADDER:
-        r = measure(L, ATTN + ("+offload" if OFFLOAD else ""))
+        r = measure(L, ("layerchunk" if LAYERCHUNK else ATTN) + ("+offload" if OFFLOAD else ""))
         res["probes"].append(r)
         save()
         if not r["ok"]:

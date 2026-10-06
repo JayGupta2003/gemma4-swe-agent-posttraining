@@ -107,7 +107,7 @@ except Exception as e:
 save_results()
 
 def run_phase(tag, extra_env, milestones, max_s):
-    env = dict(os.environ, G1_MODEL=str(STAGED), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_ATTN='stock', G1_ACC='4', G1_TRAIN_LEN='8192',
+    env = dict(os.environ, G1_MODEL=str(STAGED), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_ATTN='stock', G1_ACC='4',
                G1_MAXMEM=json.dumps({'0': '16GiB', '1': '16GiB', '2': '16GiB', '3': '16GiB'}), TOKENIZERS_PARALLELISM='false', **extra_env)
     tm = G1 / 'train_metrics.json'
     if tm.exists(): tm.unlink()
@@ -119,13 +119,14 @@ def run_phase(tag, extra_env, milestones, max_s):
 
 m = {'error': 'staging failed'}
 if 'error' not in results['B_stage']:
-    # Phase 1: activation offload ON (reentrant checkpointing + save_on_cpu), train 6 micro-steps at 8192 FIRST, save adapter, THEN probe longer lengths until the first OOM.
-    m = run_phase('offload', dict(G1_OFFLOAD='1', G1_MICRO='6', G1_TRAIN_SECONDS='720', G1_LADDER='10240,12288,14336,16384,20480'),
-                  [('[g1] loaded in', 600), ('[g1] training phase finished', 1500)], 55 * 60)
+    # Phase 1: sequence-chunked decoder layers (verified exact locally; 4-5x less memory per layer with the real 31B layer dimensions).
+    # Train 6 micro-steps at 12288 FIRST, save the adapter, THEN probe longer lengths until the first OOM.
+    m = run_phase('layerchunk', dict(G1_LAYERCHUNK='1', G1_OFFLOAD='0', G1_TRAIN_LEN='12288', G1_MICRO='6', G1_TRAIN_SECONDS='900', G1_LADDER='14336,16384,18432,20480,24576'),
+                  [('[g1] loaded in', 600), ('[g1] training phase finished', 1700)], 60 * 60)
     trained = bool(m.get('steps')) and not m.get('oom_events')
-    if not trained:   # offload misbehaved on the real model (non-OOM error or OOM): fall back to the plain config known to fit 8192 in run 5
-        print('phase 1 did not train cleanly -> fallback phase without offload')
-        m = run_phase('plain', dict(G1_OFFLOAD='0', G1_MICRO='6', G1_TRAIN_SECONDS='720', G1_LADDER=''),
+    if not trained:   # chunked layers misbehaved on the real model: fall back to the stock config that trained at 8192 in run 6 (offload on)
+        print('phase 1 did not train cleanly -> fallback phase with stock layers')
+        m = run_phase('stock', dict(G1_LAYERCHUNK='0', G1_OFFLOAD='1', G1_TRAIN_LEN='8192', G1_MICRO='6', G1_TRAIN_SECONDS='720', G1_LADDER=''),
                       [('[g1] loaded in', 600), ('[g1] training phase finished', 1500)], 30 * 60)
 shutil.rmtree(STAGED, ignore_errors=True)
 results['B_train'] = m
@@ -149,7 +150,7 @@ save_results(); print(results['C_adapter_serving'])'''
 
 SUMMARY = '''B = results.get('B_train') or {}
 print('=== G1c SUMMARY ===')
-print('stage reached:', B.get('stage'), '| error:', B.get('error'), '| offload used:', 'B_offload' in results and results['B_offload']['metrics'] is B)
+print('stage reached:', B.get('stage'), '| error:', B.get('error'), '| layerchunk:', B.get('layerchunk'), '| offload:', B.get('offload'), '| train_len:', B.get('train_len'))
 print('training: micro-steps ok =', len(B.get('steps') or []), '| tok/s =', B.get('tokens_per_second'), '| losses =', [s.get('loss') for s in B.get('steps', [])])
 print('adapter:', results.get('B_adapter'))
 print('--- ladder (longer sequences, after training) ---')
@@ -159,10 +160,10 @@ print('largest OK length after training:', B.get('largest_ok_len'))
 losses = [s.get('loss') for s in B.get('steps', [])]
 gates = {
   'training ran (>= 4 micro-steps) without OOM': len(B.get('steps') or []) >= 4 and not B.get('oom_events'),
-  'training tokens/s >= 60 at 8192': (B.get('tokens_per_second') or 0) >= 60,
+  'training tokens/s >= 60': (B.get('tokens_per_second') or 0) >= 60,
   'losses finite': bool(losses) and all(x == x and x is not None for x in losses),
   'LoRA weights actually updated (mean |B| > 0)': ((results.get('B_adapter') or {}).get('mean_abs_lora_B') or 0) > 0,
-  'fits 16k tokens (offload ladder)': (B.get('largest_ok_len') or 0) >= 16384,
+  'fits 16k tokens after training (chunked-layer ladder)': (B.get('largest_ok_len') or 0) >= 16384,
   '[reused run 4] adapter active in serving (canary logprob diff 0.35 > 0.05)': True,
   '[reused run 4] adapter decode 0.89x of baseline (>= 0.85)': True,
   '[reused run 4] 20k-token prompt completes with adapter': True,
