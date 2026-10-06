@@ -105,19 +105,39 @@ try:   # /kaggle/input is NFS (~90 MB/s/stream, ~320 MB/s with 4 parallel stream
 except Exception as e:
     results['B_stage'] = {'error': f'{type(e).__name__}: {e}'}; print('STAGING FAILED', e)
 save_results()
+
+def run_phase(tag, extra_env, milestones, max_s):
+    env = dict(os.environ, G1_MODEL=str(STAGED), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_ATTN='stock', G1_ACC='4', G1_TRAIN_LEN='8192',
+               G1_MAXMEM=json.dumps({'0': '16GiB', '1': '16GiB', '2': '16GiB', '3': '16GiB'}), TOKENIZERS_PARALLELISM='false', **extra_env)
+    tm = G1 / 'train_metrics.json'
+    if tm.exists(): tm.unlink()
+    run = U.run_supervised([sys.executable, str(CODE / 'train_g1.py')], env, G1 / f'train_{tag}.log', milestones, max_seconds=max_s)
+    m = json.loads(tm.read_text()) if tm.exists() else {'error': 'no train_metrics.json'}
+    results[f'B_{tag}'] = {'run': run, 'metrics': m}; save_results()
+    print(tag, run, '| stage', m.get('stage'), '| tok/s', m.get('tokens_per_second'), '| largest_ok', m.get('largest_ok_len'), '| error', m.get('error'))
+    return m
+
+m = {'error': 'staging failed'}
 if 'error' not in results['B_stage']:
-    env = dict(os.environ, G1_MODEL=str(STAGED), G1_DATA=str(G1_DATA), G1_OUT=str(G1), G1_MAXLEN='16384', G1_MICRO='12', G1_ACC='4', G1_ATTN='chunked',
-               G1_MAXMEM=json.dumps({'0': '16GiB', '1': '16GiB', '2': '16GiB', '3': '16GiB'}), G1_TRAIN_SECONDS='900', TOKENIZERS_PARALLELISM='false')
-    # milestones: weights loaded within 10 min (local disk), first training step within 20 min of start; whole stage <= 55 min
-    results['B_run'] = U.run_supervised([sys.executable, str(CODE / 'train_g1.py')], env, G1 / 'train.log',
-                                        [('[g1] loaded in', 600), ('[g1] largest OK length', 2400)], max_seconds=60 * 60)
-    print(results['B_run'])
-tm = G1 / 'train_metrics.json'
-results['B_train'] = json.loads(tm.read_text()) if tm.exists() else {'error': 'no train_metrics.json'}
-results['B_seconds'] = round(time.time() - t0); save_results()
+    # Phase 1: activation offload ON (reentrant checkpointing + save_on_cpu), train 6 micro-steps at 8192 FIRST, save adapter, THEN probe longer lengths until the first OOM.
+    m = run_phase('offload', dict(G1_OFFLOAD='1', G1_MICRO='6', G1_TRAIN_SECONDS='720', G1_LADDER='10240,12288,14336,16384,20480'),
+                  [('[g1] loaded in', 600), ('[g1] training phase finished', 1500)], 55 * 60)
+    trained = bool(m.get('steps')) and not m.get('oom_events')
+    if not trained:   # offload misbehaved on the real model (non-OOM error or OOM): fall back to the plain config known to fit 8192 in run 5
+        print('phase 1 did not train cleanly -> fallback phase without offload')
+        m = run_phase('plain', dict(G1_OFFLOAD='0', G1_MICRO='6', G1_TRAIN_SECONDS='720', G1_LADDER=''),
+                      [('[g1] loaded in', 600), ('[g1] training phase finished', 1500)], 30 * 60)
 shutil.rmtree(STAGED, ignore_errors=True)
-print(subprocess.run(f'grep -F "[g1]" {G1}/train.log | tail -40', shell=True, capture_output=True, text=True).stdout)
-b = results['B_train']; print({k: b.get(k) for k in ('stage', 'tokens_per_second', 'peak_gib_per_gpu', 'load_seconds', 'trainable_params_m', 'error')}); print('probes:', b.get('probes'))'''
+results['B_train'] = m
+results['B_seconds'] = round(time.time() - t0); save_results()
+ad = G1 / 'adapter_full' / 'adapter_model.safetensors'
+if ad.exists():   # did training actually move the LoRA weights? (B is initialised to zero)
+    from safetensors.torch import load_file
+    tt = load_file(str(ad)); bs = [v.float().abs().mean().item() for k, v in tt.items() if 'lora_B' in k]
+    results['B_adapter'] = {'tensors': len(tt), 'mean_abs_lora_B': sum(bs) / max(1, len(bs)), 'nonzero_B_fraction': sum(1 for x in bs if x > 0) / max(1, len(bs))}
+    print('adapter:', results['B_adapter'])
+save_results()
+print({k: m.get(k) for k in ('stage', 'tokens_per_second', 'largest_ok_len', 'oom_events', 'error')})'''
 
 STAGE_C = '''# Serving with adapters was fully measured in run 4 (same wheelhouse, scorer flags incl. --max-loras/--max-lora-rank sized to the submission): reused.
 results['C_adapter_serving'] = {'reused_from': 'g1 run 4', 'boot_s': 427,
@@ -128,27 +148,28 @@ results['C_adapter_serving'] = {'reused_from': 'g1 run 4', 'boot_s': 427,
 save_results(); print(results['C_adapter_serving'])'''
 
 SUMMARY = '''B = results.get('B_train') or {}
-print('=== G1b SUMMARY ===')
-print('stage reached:', B.get('stage'), '| error:', B.get('error'), '| training_skipped:', B.get('training_skipped'))
-print('--- diagnostic: peak GiB per GPU, fwd+bwd, stock sdpa vs chunked attention ---')
-for r in B.get('diag') or []:
-    print(f"  {r['tag']:8s} len {r['len']:6d} ok={r['ok']} peak/GPU={r.get('peak_gib_per_gpu')} above-weights={r.get('above_weights_gib_per_gpu')} fwd_peak={r.get('fwd_peak_gib_max_gpu')} chunked_calls={r.get('chunked_attn_calls')}")
-print('--- ladder (chunked attention + chunked MLP) ---')
+print('=== G1c SUMMARY ===')
+print('stage reached:', B.get('stage'), '| error:', B.get('error'), '| offload used:', 'B_offload' in results and results['B_offload']['metrics'] is B)
+print('training: micro-steps ok =', len(B.get('steps') or []), '| tok/s =', B.get('tokens_per_second'), '| losses =', [s.get('loss') for s in B.get('steps', [])])
+print('adapter:', results.get('B_adapter'))
+print('--- ladder (longer sequences, after training) ---')
 for r in B.get('probes') or []:
-    print(f"  len {r['len']:6d} ok={r['ok']} {r.get('seconds')}s {r.get('tokens_per_second')} tok/s above-weights={r.get('above_weights_gib_per_gpu')} peak={r.get('peak_gib_per_gpu')}")
-print('largest OK length:', B.get('largest_ok_len'), '| trained at:', B.get('train_len'), '| usable examples:', B.get('train_examples_usable_at_len'))
-print('training tok/s:', B.get('tokens_per_second'), '| losses:', [s.get('loss') for s in B.get('steps', [])])
+    print(f"  len {r['len']:6d} ok={r['ok']} {r.get('seconds')}s {r.get('tokens_per_second')} tok/s above-weights={r.get('above_weights_gib_per_gpu')} peak={r.get('peak_gib_per_gpu')} leak={r.get('leak_gib_after_cleanup')}")
+print('largest OK length after training:', B.get('largest_ok_len'))
+losses = [s.get('loss') for s in B.get('steps', [])]
 gates = {
-  'fits 16k tokens with chunked attention (largest OK >= 16384)': (B.get('largest_ok_len') or 0) >= 16384,
-  'training tokens/s >= 60 at the trained length': (B.get('tokens_per_second') or 0) >= 60,
-  'training completed steps without OOM': bool(B.get('steps')) and not B.get('oom_events'),
-  'loss decreased or finite (first vs last)': bool(B.get('steps')) and all(s.get('loss') == s.get('loss') for s in B['steps']),
+  'training ran (>= 4 micro-steps) without OOM': len(B.get('steps') or []) >= 4 and not B.get('oom_events'),
+  'training tokens/s >= 60 at 8192': (B.get('tokens_per_second') or 0) >= 60,
+  'losses finite': bool(losses) and all(x == x and x is not None for x in losses),
+  'LoRA weights actually updated (mean |B| > 0)': ((results.get('B_adapter') or {}).get('mean_abs_lora_B') or 0) > 0,
+  'fits 16k tokens (offload ladder)': (B.get('largest_ok_len') or 0) >= 16384,
   '[reused run 4] adapter active in serving (canary logprob diff 0.35 > 0.05)': True,
   '[reused run 4] adapter decode 0.89x of baseline (>= 0.85)': True,
   '[reused run 4] 20k-token prompt completes with adapter': True,
 }
 for k, v in gates.items(): print(('PASS ' if v else 'FAIL ') + k)
 results['gates'] = gates; results['finished'] = time.strftime('%Y-%m-%d %H:%M:%S'); save_results()
+for d in WORK.glob('sub_*'): shutil.rmtree(d, ignore_errors=True)
 _wd.cancel()'''
 
 

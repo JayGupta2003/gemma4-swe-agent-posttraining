@@ -13,10 +13,13 @@ Environment variables (all strings):
   G1_MICRO   number of micro-steps (sequences) to run (default 16); G1_ACC grad-accumulation (default 4)
   G1_MAXMEM  JSON dict gpu->limit for device_map auto, e.g. {"0":"15GiB","1":"19GiB",...}
   G1_TRAIN_SECONDS  stop training after this many seconds (default 1500)
-  G1_ATTN    "chunked" (default) or "stock"; G1_DIAG lengths for the stock-vs-chunked memory diagnostic (default 2048,3072,4096)
-  G1_LADDER  ascending lengths for the memory/throughput ladder (default 4096..32768); training then runs at the largest OK length <= G1_MAXLEN
+  G1_OFFLOAD "1" (default) offloads saved layer-boundary activations to pinned CPU RAM (reentrant checkpointing + save_on_cpu)
+  G1_ATTN    "stock" (default, sdpa) or "chunked"; G1_DIAG lengths for the stock-vs-chunked memory diagnostic (default 2048,3072,4096)
+  G1_TRAIN_LEN training sequence length (default 8192); training runs FIRST, then the ladder probes ascending lengths until the first OOM (G1_MICRO=0 skips training)
 """
 
+import contextlib
+import gc
 import json
 import os
 import re
@@ -46,10 +49,14 @@ RENDER = os.environ.get("G1_RENDER", "flat")
 MICRO = int(os.environ.get("G1_MICRO", "16"))
 ACC = int(os.environ.get("G1_ACC", "4"))
 MAXMEM = json.loads(os.environ.get("G1_MAXMEM", "null"))
+TRAIN_LEN = int(os.environ.get("G1_TRAIN_LEN", "8192"))  # training length (default 8192: known to fit in G1 run 5)
+OFFLOAD = os.environ.get("G1_OFFLOAD", "1") == "1"   # reentrant checkpointing + save_on_cpu: layer-boundary activations live in pinned host RAM
+TEST_MEMFRAC = os.environ.get("G1_TEST_MEMFRAC")  # local test only: cap GPU memory to force an OOM
+NO_CLEANUP = os.environ.get("G1_TEST_NO_CLEANUP") == "1"  # local test only: reproduce the leak after an OOM
 TRAIN_SECONDS = float(os.environ.get("G1_TRAIN_SECONDS", "1500"))
-ATTN = os.environ.get("G1_ATTN", "chunked")  # chunked (memory-bounded, scripts/g1/gemma4_memfix.py) | stock (sdpa)
-LADDER = [int(x) for x in os.environ.get("G1_LADDER", "4096,8192,12288,16384,20480,24576,32768").split(",") if x]
-DIAG = [int(x) for x in os.environ.get("G1_DIAG", "2048,3072,4096").split(",") if x]  # stock-vs-chunked memory comparison lengths
+ATTN = os.environ.get("G1_ATTN", "stock")  # chunked (memory-bounded, scripts/g1/gemma4_memfix.py) | stock (sdpa)
+LADDER = [int(x) for x in os.environ.get("G1_LADDER", "6144,8192,10240,12288,14336,16384,20480").split(",") if x]
+DIAG = [int(x) for x in os.environ.get("G1_DIAG", "").split(",") if x]  # stock-vs-chunked memory comparison lengths
 TARGET_RE = r".*language_model\.layers\.\d+\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))"
 
 OUT.mkdir(parents=True, exist_ok=True)
@@ -145,8 +152,7 @@ def build_examples(tok) -> list[tuple[list[int], list[int]]]:
 # ---------------------------------------------------------------- model
 def load_model():
     cls = getattr(transformers, "Gemma4ForConditionalGeneration", None) or transformers.AutoModelForImageTextToText
-    if ATTN == "chunked":
-        MF.install()
+    MF.install()  # registers chunked attention + patches the MLP (exact); attention only used if G1_ATTN=chunked
     if TINY:
         from transformers import Gemma4Config, Gemma4TextConfig
         t = Gemma4TextConfig(vocab_size=262144, hidden_size=64, intermediate_size=128, num_hidden_layers=6, num_attention_heads=4,
@@ -176,9 +182,11 @@ def main() -> None:
     res["mem_after_load_gib"] = [round(torch.cuda.memory_allocated(i) / 2**30, 2) for i in range(torch.cuda.device_count())]
     save()
 
+    if TEST_MEMFRAC and torch.cuda.is_available():
+        torch.cuda.set_per_process_memory_fraction(float(TEST_MEMFRAC))
     from peft import LoraConfig, get_peft_model
     model.config.use_cache = False
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": OFFLOAD})
     model.enable_input_require_grads()
     pm = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0, bias="none", target_modules=TARGET_RE, task_type="CAUSAL_LM"))
     n_tr = sum(p.numel() for p in pm.parameters() if p.requires_grad)
@@ -217,7 +225,8 @@ def main() -> None:
         x = torch.tensor([ids], device=dev)
         for attempt in range(2):
             try:
-                hs = inner(input_ids=x, attention_mask=torch.ones_like(x), use_cache=False, **extra_kw).last_hidden_state[0]
+                with (torch.autograd.graph.save_on_cpu(pin_memory=True) if OFFLOAD else contextlib.nullcontext()):
+                    hs = inner(input_ids=x, attention_mask=torch.ones_like(x), use_cache=False, **extra_kw).last_hidden_state[0]
                 break
             except (ValueError, TypeError) as e:
                 if attempt == 0 and "token_type" in str(e):
@@ -255,6 +264,22 @@ def main() -> None:
                 break
         return ids[:L], labels[:L]
 
+    base_alloc = [torch.cuda.memory_allocated(i) for i in range(torch.cuda.device_count())] if torch.cuda.is_available() else []
+
+    def cleanup(tag: str) -> float:
+        """Free everything after a step. After an OOM the exception's traceback keeps the failed step's activation graph alive through
+        reference cycles; without gc.collect() every later step then fails too (this poisoned G1 runs 4 and 5)."""
+        opt.zero_grad(set_to_none=True)
+        if not NO_CLEANUP:
+            gc.collect()
+            torch.cuda.empty_cache()
+            gc.collect()
+            torch.cuda.empty_cache()
+        leak = max((torch.cuda.memory_allocated(i) - b) for i, b in enumerate(base_alloc)) / 2**30 if base_alloc else 0.0
+        if leak > 0.3:
+            log(f"WARNING: {leak:.2f} GiB still allocated after cleanup ({tag})")
+        return round(leak, 2)
+
     def measure(L: int, tag: str) -> dict:
         ids, labels = seq_of_len(L)
         if not any(x != -100 for x in labels[1:]):  # short windows lie inside the prompt (no labels): put labels on the last quarter
@@ -265,6 +290,7 @@ def main() -> None:
             torch.cuda.reset_peak_memory_stats(i)
         base = [torch.cuda.memory_allocated(i) / 2**30 for i in range(torch.cuda.device_count())]
         t1 = time.perf_counter()
+        oom = False
         try:
             _loss, n, fwd_peak = fwd_bwd(ids, labels)
             torch.cuda.synchronize()
@@ -274,10 +300,11 @@ def main() -> None:
                  "fwd_peak_gib_max_gpu": fwd_peak, "peak_gib_per_gpu": gpu_peaks(),
                  "above_weights_gib_per_gpu": [round(p - b, 2) for p, b in zip(gpu_peaks(), base)]}
         except torch.cuda.OutOfMemoryError:
+            oom = True  # handled after leaving the except block so the traceback (and its tensors) can be freed
+        if oom:
             r = {"tag": tag, "len": L, "ok": False, "error": "OOM", "peak_gib_per_gpu": gpu_peaks(),
                  "chunked_attn_calls": MF.calls["attn"], "chunked_mlp_calls": MF.calls["mlp"]}
-        opt.zero_grad(set_to_none=True)
-        torch.cuda.empty_cache()
+        r["leak_gib_after_cleanup"] = cleanup(f"measure {L}")
         log("measure", r)
         return r
 
@@ -304,42 +331,27 @@ def main() -> None:
                 res["diag"].append(measure(L, "stock"))
                 save()
 
-    # ---- memory/throughput ladder with the configured attention
-    res["stage"] = "ladder"
-    res["probes"] = []
-    best = 0
-    for L in LADDER:
-        r = measure(L, ATTN)
-        res["probes"].append(r)
-        save()
-        if not r["ok"]:
-            break
-        best = L
-    train_len = min(best, MAXLEN)
-    res["largest_ok_len"] = best
-    res["train_len"] = train_len
-    log("largest OK length", best, "-> training at", train_len)
-
-    # ---- training steps at the largest feasible length (skipped if the prompt alone does not fit: no label tokens)
+    # ---- 1. training steps FIRST, at a length already known to fit (an OOM during the later ladder must not be able to ruin them)
     res["stage"] = "training"
     steps, tok_total, t_train0 = [], 0, None
     t_wall0 = time.perf_counter()
+    train_len = TRAIN_LEN
     usable = [(i[:train_len], l[:train_len]) for i, l in exs if sum(1 for x in l[:train_len] if x != -100) >= 200]
+    res["train_len"] = train_len
     res["train_examples_usable_at_len"] = len(usable)
-    if train_len < 6000 or not usable:
-        res["training_skipped"] = f"largest feasible length {train_len} leaves no usable examples (prompt alone is ~4.5k tokens)"
-        log(res["training_skipped"])
-    for k in range(MICRO if usable and train_len >= 6000 else 0):
+    n_micro = MICRO if usable else 0
+    for k in range(n_micro):
         ids, labels = usable[k % len(usable)]
         torch.cuda.synchronize()
         t1 = time.perf_counter()
+        oom = False
         try:
             loss, n_tok, _fp = fwd_bwd(ids, labels)
         except torch.cuda.OutOfMemoryError:
+            oom = True
+        if oom:
             res.setdefault("oom_events", []).append({"micro": k, "tokens": len(ids)})
-            log("OOM at micro", k, "tokens", len(ids))
-            opt.zero_grad(set_to_none=True)
-            torch.cuda.empty_cache()
+            log("OOM at micro", k, "tokens", len(ids), "| leak after cleanup (GiB):", cleanup(f"train {k}"))
             save()
             continue
         if (k + 1) % ACC == 0:
@@ -360,12 +372,27 @@ def main() -> None:
         if time.perf_counter() - t_wall0 > TRAIN_SECONDS:
             res["stopped_by_time_budget"] = True
             break
+    log("training phase finished: micro-steps ok =", len(steps), "| tokens/s =", res.get("tokens_per_second"))
+    if n_micro:
+        res["stage"] = "saving"
+        pm.save_pretrained(str(OUT / "adapter_full"))
+        log("adapter saved to", OUT / "adapter_full")
 
-    res["stage"] = "saving"
-    pm.save_pretrained(str(OUT / "adapter_full"))
+    # ---- 2. memory/throughput ladder (ascending; stops at the first OOM, which is fine because the adapter is already saved)
+    res["stage"] = "ladder"
+    res["probes"] = []
+    best = 0
+    for L in LADDER:
+        r = measure(L, ATTN + ("+offload" if OFFLOAD else ""))
+        res["probes"].append(r)
+        save()
+        if not r["ok"]:
+            break
+        best = L
+    res["largest_ok_len"] = best
     res["stage"] = "done"
     save()
-    log("done; adapter saved to", OUT / "adapter_full")
+    log("largest OK length", best, "| done")
 
 
 if __name__ == "__main__":
