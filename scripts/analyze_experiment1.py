@@ -97,6 +97,26 @@ def call_mix(arm_dir: Path, ids: list[str]) -> dict[str, float]:
     return out
 
 
+def token_stats(arm_dir: Path, ids: list[str]) -> dict:
+    """Context length per attempt = prompt + completion tokens of the last step (what the model actually saw), plus decoded tokens."""
+    import statistics as st
+    ctx, comp, steps = [], [], []
+    for iid in ids:
+        p = arm_dir / "traces" / f"trace_{iid}.json"
+        if not p.exists():
+            continue
+        t = json.loads(p.read_text(encoding="utf-8"))
+        ag = [x for x in t["steps"] if x.get("source") == "agent" and x.get("metrics")]
+        if not ag:
+            continue
+        ctx.append(ag[-1]["metrics"]["prompt_tokens"] + ag[-1]["metrics"]["completion_tokens"])
+        comp.append(sum(x["metrics"]["completion_tokens"] for x in ag))
+        steps.append(len(ag))
+    q = lambda a, f: round(f(a)) if a else float("nan")
+    return {"ctx_median": q(ctx, st.median), "ctx_p75": q(sorted(ctx)[3 * len(ctx) // 4:][:1], st.median) if ctx else float("nan"),
+            "decoded_median": q(comp, st.median), "steps_median": q(steps, st.median), "n": len(ctx)}
+
+
 def main(root: Path, exp_name: str = "exp1") -> None:
     exp = root / exp_name
     arms = sorted(d.name for d in exp.iterdir() if (d / "task_results.jsonl").exists())
@@ -132,6 +152,20 @@ def main(root: Path, exp_name: str = "exp1") -> None:
 
     c_res = sum(flag(r, "resolved") for r in base.values())
     c_patch = sum(flag(r, "patch") for r in base.values())
+    if exp_name == "exp3":
+        print("\nTOKENS per attempt (context = last step prompt+completion; decoded = sum of completion tokens):")
+        ts = {a: token_stats(exp / a, ids) for a in arms}
+        for a in arms:
+            print(f"  {a:16s} {ts[a]}")
+        print("\nPRE-REGISTERED RULE (STRATEGY.md Experiment 3): an arm is ACCEPTABLE iff resolved >= control-2 AND patch-written >= control-2 AND "
+              "median context <= 0.80 x control; it is a WIN if additionally resolved >= control+3. Anything else: keep the control prompt.")
+        for a in arms[1:]:
+            res = sum(flag(r, "resolved") for r in data[a].values()); pat = sum(flag(r, "patch") for r in data[a].values())
+            ratio = ts[a]["ctx_median"] / ts[ctx_arm := arms[0]]["ctx_median"] if ts[arms[0]]["ctx_median"] else float("nan")
+            ok = res >= c_res - 2 and pat >= c_patch - 2 and ratio <= 0.80
+            win = ok and res >= c_res + 3
+            print(f"  {a:16s} resolved {res-c_res:+d} patch {pat-c_patch:+d} median-context ratio {ratio:.2f} -> {'WIN' if win else 'ACCEPTABLE (lean without loss)' if ok else 'keep control'}")
+        return
     if exp_name == "exp2":
         print("\nLADDER (each arm vs the previous rung; two-sided exact sign test):")
         for prev, a in zip(arms, arms[1:]):
