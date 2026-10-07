@@ -8,7 +8,7 @@ this way; the only zip built with forward slashes, 56682704, was the only one th
 Python's zipfile.namelist() CANNOT be used to verify on Windows -- ZipInfo rewrites
 os.sep to '/' on read -- so verification here parses the central directory directly.
 
-Usage: python scripts/build_submission_zip.py [output_path]
+Usage: python scripts/build_submission_zip.py [output_path] [source_dir]
 """
 
 from __future__ import annotations
@@ -68,6 +68,8 @@ def verify(path: Path) -> None:
 
 if __name__ == "__main__":
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_OUT
+    if len(sys.argv) > 2:   # optional source directory (default: submission/)
+        SRC = Path(sys.argv[2]).resolve()
     build(out)
     verify(out)
     print("wrote", out)
