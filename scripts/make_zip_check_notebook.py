@@ -37,10 +37,16 @@ exp = json.loads((DATA / 'expected.json').read_text())
 raw = base64.b64decode(next(DATA.glob('*.zip.b64.txt')).read_text())
 zp = Path('/tmp/check.zip'); zp.write_bytes(raw)
 print('zip sha256 matches local build:', hashlib.sha256(raw).hexdigest() == exp['zip_sha256'], '|', len(raw), 'bytes')
-from adk_submission import compile_submission
+from adk_submission import ModelRegistry, compile_submission, discover_declared_models
 from swegemma.context import SwegemmaContext
-from swegemma.models import Task, resolve_swegemma_adapter, setup_gemma_model_registry
-models = setup_gemma_model_registry()
+from swegemma.models import Task
+from swegemma.harness.agent_runner import resolve_swegemma_adapter
+from google.adk.models.lite_llm import LiteLlm
+def build_models(d):   # same recipe as swegemma 0.2.11's own CLI: one LiteLlm per declared model (the endpoint is irrelevant for compilation)
+    reg = ModelRegistry()
+    for m in discover_declared_models(d):
+        reg.register(m.strip(), LiteLlm(model='openai/' + m.strip(), api_base='http://127.0.0.1:8000/v1', api_key='EMPTY'))
+    return reg
 task = Task(instance_id='d', repo='d/d', base_commit='0'*40, problem_statement='d')
 ctx = SwegemmaContext(docker_manager=None, container_id='', problem_statement='d', hints_text='', task=task, repo='d/d', graph_dir='/tmp', embeddings_dir='/tmp')
 tools = ctx.create_tools()
@@ -51,6 +57,7 @@ def check(label, d):
     same = files == exp['files']
     print(f'  [{label}] extracted files:', sorted(files), '| identical to expected contents:', same)
     try:
+        models = build_models(d)
         agent = compile_submission(submission_dir=Path(d), tool_registry=tools, model_registry=models, adapter_resolver_fn=lambda b, i: resolve_swegemma_adapter(b, i, models))
         print(f'  [{label}] COMPILE OK: {agent.name}'); ok = True
     except Exception as e:

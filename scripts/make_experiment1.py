@@ -139,12 +139,17 @@ print(f'{len(DEV_IDS)} dev tasks:', {r: sum(1 for i in DEV_IDS if i.startswith(r
 VLLM = '''import litellm, torch
 from adk_submission import VllmConfig, VllmServer, discover_adapters
 from swegemma.config import ALLOWED_ADAPTER_EXTENSIONS
-from swegemma.models.discovery import validate_single_declared_model
 litellm.drop_params = True
 TARGET_MODEL_NAME = 'gemma-4-31b-it-qat-w4a16-ct'
 MODEL_PATH = Path('/kaggle/input/models/google/gemma-4/other/gemma-4-31b-it-qat-w4a16-ct/2')
 first_arm = ARMS[sorted(ARMS)[0]]
-declared_model = validate_single_declared_model(first_arm)
+try:   # swegemma >= 0.2.11 / adk_submission >= 0.2.13 (wheelhouse of 2026-10-09)
+    from adk_submission import discover_declared_models
+    _declared = discover_declared_models(first_arm); assert len(_declared) == 1, f'expected exactly one declared model, got {_declared}'
+    declared_model = next(iter(_declared))
+except ImportError:   # older wheelhouse
+    from swegemma.models.discovery import validate_single_declared_model
+    declared_model = validate_single_declared_model(first_arm)
 adapters = discover_adapters(str(first_arm), adapter_extensions=ALLOWED_ADAPTER_EXTENSIONS)
 gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 1
 tp_size = 4 if gpu_count >= 4 else (2 if gpu_count >= 2 else 1)
