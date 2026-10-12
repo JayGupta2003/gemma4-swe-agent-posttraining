@@ -58,8 +58,29 @@ def check(label, d):
     print(f'  [{label}] extracted files:', sorted(files), '| identical to expected contents:', same)
     try:
         models = build_models(d)
-        agent = compile_submission(submission_dir=Path(d), tool_registry=tools, model_registry=models, adapter_resolver_fn=lambda b, i: resolve_swegemma_adapter(b, i, models))
-        print(f'  [{label}] COMPILE OK: {agent.name}'); ok = True
+        from adk_submission import discover_adapters
+        from swegemma.config import ALLOWED_ADAPTER_EXTENSIONS, build_submission_limits
+        manifest = discover_adapters(str(d), adapter_extensions=ALLOWED_ADAPTER_EXTENSIONS)
+        for a in manifest.adapters:   # the scorer registers each adapter as a served model alias
+            models.register(a, LiteLlm(model='openai/' + a, api_base='http://127.0.0.1:8000/v1', api_key='EMPTY'))
+        limits, gen = build_submission_limits()
+        agent = compile_submission(submission_dir=Path(d), tool_registry=tools, model_registry=models, limits=limits, generation_constraints=gen, adapter_manifest=manifest,
+                                   adapter_resolver_fn=lambda b, i: resolve_swegemma_adapter(b, i, models))
+        mid = getattr(getattr(agent, 'model', None), 'model', None)
+        print(f'  [{label}] COMPILE OK: {agent.name} | adapters {sorted(manifest.adapters)} | root model {mid}'); ok = True
+        if manifest.adapters:
+            ok = ok and mid in {'openai/' + a for a in manifest.adapters}
+            try:
+                sub = [s for s in getattr(agent, 'tools', []) if hasattr(s, 'agent')]
+                print(f'  [{label}] sub-agent models:', [getattr(getattr(s.agent, 'model', None), 'model', None) for s in sub])
+            except Exception as e:
+                print(f'  [{label}] (could not list sub-agent models: {e})')
+        import json as _j, struct
+        for ap in manifest.adapters:
+            f = Path(d) / 'adapters' / ap / 'adapter_model.safetensors'
+            with open(f, 'rb') as fh:
+                n = struct.unpack('<Q', fh.read(8))[0]; hdr = _j.loads(fh.read(n))
+            print(f'  [{label}] adapter {ap}: {len(hdr) - 1} tensors, {f.stat().st_size} bytes')
     except Exception as e:
         print(f'  [{label}] COMPILE FAILED: {type(e).__name__}: {str(e)[:300]}'); ok = False
     ok_all = ok_all and same and ok
