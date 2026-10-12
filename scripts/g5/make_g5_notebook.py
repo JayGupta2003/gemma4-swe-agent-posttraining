@@ -68,12 +68,19 @@ def _probe(n_tok=400):
     best = 0
     for _ in range(3):
         t0 = time.perf_counter()
-        r = _rq.post(VLLM_URL + '/v1/chat/completions', json={'model': TARGET_MODEL_NAME, 'max_tokens': n_tok, 'temperature': 0.7,
+        # vLLM serves the model under its PATH (captured 31B requests carry the path as `model`), not under the alias
+        r = _rq.post(VLLM_URL + '/v1/chat/completions', json={'model': str(MODEL_PATH), 'max_tokens': n_tok, 'temperature': 0.7,
               'messages': [{'role': 'user', 'content': 'Write a long, detailed explanation of how Python decorators work, with several examples.'}],
               'chat_template_kwargs': {'enable_thinking': False}}, timeout=600).json()
-        dt = time.perf_counter() - t0; n = r['usage']['completion_tokens']; best = max(best, n / dt)
+        dt = time.perf_counter() - t0
+        if 'usage' not in r: raise RuntimeError('probe response without usage: ' + json.dumps(r)[:400])
+        best = max(best, r['usage']['completion_tokens'] / dt)
     return round(best, 1)
-RESULTS['decode_tok_s_single_stream'] = _probe(); print('decode tok/s (single stream):', RESULTS['decode_tok_s_single_stream'], '| 31B reference 37.5'); save_results()
+try:   # informational only: must never stop the run
+    RESULTS['decode_tok_s_single_stream'] = _probe(); print('decode tok/s (single stream):', RESULTS['decode_tok_s_single_stream'], '| 31B reference 37.5')
+except Exception as _e:
+    RESULTS['decode_probe_error'] = repr(_e)[:600]; print('decode probe FAILED (non-fatal):', repr(_e)[:600])
+save_results()
 '''
 s = s + "\n" + PROBE
 txt[5] = s
