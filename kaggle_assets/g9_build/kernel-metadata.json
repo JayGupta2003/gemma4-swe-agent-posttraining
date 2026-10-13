@@ -1,0 +1,22 @@
+{
+  "id": "noobhunterjay/gemma-4-g9-build",
+  "title": "Gemma 4 G9 Build",
+  "code_file": "build.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [],
+  "dataset_sources": [
+    "noobhunterjay/gemma4-g8-candidates"
+  ],
+  "kernel_sources": [
+    "noobhunterjay/gemma-4-g8-scale-0",
+    "noobhunterjay/gemma-4-g8-scale-1"
+  ],
+  "competition_sources": [],
+  "model_sources": [],
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461"
+}
