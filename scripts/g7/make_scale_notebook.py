@@ -52,14 +52,23 @@ def code(s):
     return {"cell_type": "code", "execution_count": None, "metadata": {}, "outputs": [], "source": s.splitlines(True)}
 
 
-head = f"import json\nSHARD = {shard}\nBUDGET_H = {budget_h}\nWORKER_SRC = {json.dumps(WORKER)}\nTASKS = json.loads({json.dumps(json.dumps(mine))})"
+# the candidate list lives in a small private dataset (a 7 MB notebook is rejected by Kaggle with HTTP 400)
+DS = ROOT / "kaggle_assets" / "g8_candidates_dataset"
+DS.mkdir(parents=True, exist_ok=True)
+(DS / "candidates.jsonl").write_text("".join(json.dumps(t) + "\n" for t in tasks), encoding="utf-8", newline="\n")
+(DS / "dataset-metadata.json").write_text(json.dumps({"title": "gemma4-g8-candidates", "id": "noobhunterjay/gemma4-g8-candidates",
+                                                      "licenses": [{"name": "other"}]}, indent=2), encoding="utf-8")
+head = (f"import json\nfrom pathlib import Path\nSHARD = {shard}\nN_SHARDS = {n_shards}\nBUDGET_H = {budget_h}\nWORKER_SRC = {json.dumps(WORKER)}\n"
+        "_p = next(Path('/kaggle/input').rglob('candidates.jsonl'))\n"
+        "_all = [json.loads(l) for l in open(_p, encoding='utf-8')]\n"
+        "TASKS = [t for i, t in enumerate(_all) if i % N_SHARDS == SHARD]\nprint(len(_all), 'candidates;', len(TASKS), 'in this shard')")
 nb = {"cells": [code("import os, sys\nprint(sys.version, '| PYTHONPATH =', os.environ.get('PYTHONPATH'))"), code(head), code(RUN)],
       "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python", "version": "3.12"}},
       "nbformat": 4, "nbformat_minor": 5}
 (OUT / "scale.ipynb").write_text(json.dumps(nb, indent=1), encoding="utf-8")
 (OUT / "kernel-metadata.json").write_text(json.dumps({
     "id": f"noobhunterjay/gemma-4-g8-scale-{shard}", "title": f"Gemma 4 G8 Scale {shard}", "code_file": "scale.ipynb", "language": "python", "kernel_type": "notebook",
-    "is_private": True, "enable_gpu": False, "enable_tpu": False, "enable_internet": True, "keywords": [], "dataset_sources": [], "kernel_sources": [],
+    "is_private": True, "enable_gpu": False, "enable_tpu": False, "enable_internet": True, "keywords": [], "dataset_sources": ["noobhunterjay/gemma4-g8-candidates"], "kernel_sources": [],
     "competition_sources": [], "model_sources": [],
     "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461"}, indent=2), encoding="utf-8")
 print("wrote", OUT, "|", len(mine), "of", len(tasks), "tasks")
