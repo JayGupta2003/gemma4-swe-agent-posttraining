@@ -34,6 +34,15 @@ POOL = Path(next(Path('/kaggle/input').rglob('tasks.jsonl'))).parent
 ARM = next(p.parent for p in Path('/kaggle/input').rglob('agent.yaml') if 'swe_scaffold_v2_b1' in p.read_text(encoding='utf-8'))
 print('pool:', POOL, '| arm:', ARM, '| wheels:', len(list((POOL / 'wheels').glob('*.whl'))), '| snapshots:', len(list((POOL / 'snapshots').glob('*.tgz'))))
 WORK = Path('/kaggle/working'); (WORK / 'gold').mkdir(exist_ok=True)
+# In subprocess mode swegemma does NOT inject the wheel set (install_test_dependencies returns early); the sandbox venv only sees the host's site-packages through a
+# _host_env.pth built from sys.path. So unpack the shared wheels into a side directory and APPEND it to sys.path (host packages keep priority).
+import subprocess, sys
+TD = Path('/tmp/taskdeps/site-packages'); TD.mkdir(parents=True, exist_ok=True)
+_whl = sorted(str(w) for w in (POOL / 'wheels').glob('*.whl'))
+_r = subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--no-index', '--no-deps', '--target', str(TD), *_whl], capture_output=True, text=True)
+print('taskdeps install: rc', _r.returncode, '| packages unpacked:', len([p for p in TD.iterdir() if p.suffix == '.dist-info']), '|', (_r.stderr or '')[-300:])
+assert _r.returncode == 0
+sys.path.append(str(TD))
 reg = ModelRegistry()
 for m in discover_declared_models(ARM): reg.register(m, LiteLlm(model='openai/' + m, api_base='http://127.0.0.1:8000/v1', api_key='EMPTY'))
 config = EvalConfig(tasks_path=POOL / 'tasks.jsonl', snapshots_dir=POOL / 'snapshots', results_dir=WORK / 'gold', submission_dir=ARM, models=reg, sandbox='subprocess',
