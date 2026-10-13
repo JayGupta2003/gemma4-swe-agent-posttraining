@@ -37,11 +37,11 @@ WORK = Path('/kaggle/working'); (WORK / 'gold').mkdir(exist_ok=True)
 # In subprocess mode swegemma does NOT inject the wheel set (install_test_dependencies returns early); the sandbox venv only sees the host's site-packages through a
 # _host_env.pth built from sys.path. So unpack the shared wheels into a side directory and APPEND it to sys.path (host packages keep priority).
 import subprocess, sys
-TD = Path('/tmp/taskdeps/site-packages'); TD.mkdir(parents=True, exist_ok=True)
-_whl = sorted(str(w) for w in (POOL / 'wheels').glob('*.whl'))
-_r = subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--no-index', '--no-deps', '--target', str(TD), *_whl], capture_output=True, text=True)
-print('taskdeps install: rc', _r.returncode, '| packages unpacked:', len([p for p in TD.iterdir() if p.suffix == '.dist-info']), '|', (_r.stderr or '')[-300:])
-assert _r.returncode == 0
+exec(__TASKDEPS__)   # defines build_taskdeps / classify (pytest, its core deps and pytest plugins must NOT go into the side dir; see scripts/g9/taskdeps.py)
+TD = Path('/tmp/taskdeps/site-packages')
+_rep = build_taskdeps(POOL / 'wheels', TD)
+print('taskdeps: rc', _rep['rc'], '| installed', _rep['installed'], '| denied', len(_rep['denied']), _rep['denied'][:12], '| pytest plugins excluded', len(_rep['plugins_excluded']), _rep['plugins_excluded'][:12])
+assert _rep['rc'] == 0, _rep['stderr_tail']
 sys.path.append(str(TD))
 reg = ModelRegistry()
 for m in discover_declared_models(ARM): reg.register(m, LiteLlm(model='openai/' + m, api_base='http://127.0.0.1:8000/v1', api_key='EMPTY'))
@@ -111,7 +111,8 @@ def code(s):
 
 limit = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 budget_h = float(sys.argv[2]) if len(sys.argv) > 2 else 8.0
-nb = {"cells": [code(e1.INSTALL), code(RUN.replace("__LIMIT__", str(limit)).replace("__BUDGET_H__", str(budget_h)))],
+TASKDEPS_SRC = (ROOT / "scripts" / "g9" / "taskdeps.py").read_text(encoding="utf-8").replace(chr(13) + chr(10), chr(10))
+nb = {"cells": [code(e1.INSTALL), code(RUN.replace("__LIMIT__", str(limit)).replace("__BUDGET_H__", str(budget_h)).replace("__TASKDEPS__", json.dumps(TASKDEPS_SRC)))],
       "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python", "version": "3.12"}},
       "nbformat": 4, "nbformat_minor": 5}
 (OUT / "gold.ipynb").write_text(json.dumps(nb, indent=1), encoding="utf-8")
