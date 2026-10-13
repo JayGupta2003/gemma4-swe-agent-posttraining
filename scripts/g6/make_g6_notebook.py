@@ -9,6 +9,7 @@ Expected cost: boot ~10 min + 2 x (2-task smoke ~5 min + <= 42 min round) ~ 1.7 
 """
 
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +20,8 @@ OUT.mkdir(parents=True, exist_ok=True)
 SCREEN = json.loads((ROOT / "docs" / "g6_screen_tasks.json").read_text(encoding="utf-8"))
 assert len(SCREEN) == 32 and len(set(SCREEN)) == 32
 ARMS_SRC = (HERE / "g6_arms.py").read_text(encoding="utf-8").replace("\r\n", "\n")
+ARMS_TO_RUN = tuple(sys.argv[1].split(",")) if len(sys.argv) > 1 else ("t1", "t2")   # e.g. `make_g6_notebook.py t1` for a T1-only run
+assert set(ARMS_TO_RUN) <= {"t1", "t2"}
 
 
 def sub(s, old, new, count=1):
@@ -64,7 +67,7 @@ def config_gate(tag, arm):
     if not reqs or bad:
         raise RuntimeError(f'CONFIG GATE FAILED for arm {arm}: {len(reqs)} requests, mismatches {bad[:3]}')
 
-for arm in ('t1', 't2'):
+for arm in __ARMS_TO_RUN__:
     elapsed = (time.time() - T_START) / 60
     if arm == 't2' and elapsed + 50 > BUDGET_MIN - 5:
         print(f'not starting t2: elapsed {elapsed:.0f} min + ~50 min would exceed the budget'); break
@@ -104,7 +107,7 @@ for tag in ('smoke_t1', 't1', 'smoke_t2', 't2'):
 print('capture:', proxy.stats(), '| file MB:', round((G2 / 'capture.jsonl.gz').stat().st_size / 1e6, 1))
 RESULTS['finished'] = time.strftime('%Y-%m-%d %H:%M:%S'); RESULTS['capture'] = proxy.stats(); save_results()
 _wd.cancel()'''
-s = s[:cut] + TAIL.replace("ARMS_SRC", "ARMS_SRC")
+s = s[:cut] + TAIL.replace('__ARMS_TO_RUN__', repr(ARMS_TO_RUN))
 # embed the arms source as a module-level string defined at the top of the cell
 s = "ARMS_SRC = " + json.dumps(ARMS_SRC) + "\n" + s
 txt[7] = s
