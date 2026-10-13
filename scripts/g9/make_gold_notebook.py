@@ -40,7 +40,7 @@ import subprocess, sys
 exec(__TASKDEPS__)   # defines build_taskdeps / classify (pytest, its core deps and pytest plugins must NOT go into the side dir; see scripts/g9/taskdeps.py)
 TD = Path('/tmp/taskdeps/site-packages')
 _rep = build_taskdeps(POOL / 'wheels', TD)
-print('taskdeps: rc', _rep['rc'], '| installed', _rep['installed'], '| denied', len(_rep['denied']), _rep['denied'][:12], '| pytest plugins excluded', len(_rep['plugins_excluded']), _rep['plugins_excluded'][:12])
+print('taskdeps: rc', _rep['rc'], '| installed', _rep['installed'], '| denied', len(_rep['denied']), _rep['denied'][:12], '| pytest plugins excluded', len(_rep['plugins_excluded']), _rep['plugins_excluded'][:12], '| pytest11 entry points stripped', len(_rep['pytest_entry_points_stripped']), _rep['pytest_entry_points_stripped'][:15])
 assert _rep['rc'] == 0, _rep['stderr_tail']
 sys.path.append(str(TD))
 reg = ModelRegistry()

@@ -32,11 +32,32 @@ def classify(wheel: Path) -> str:
     return "ok"
 
 
+def strip_pytest_entry_points(target: Path) -> list:
+    """Remove the [pytest11] section from every dist-info in the side directory (except whitelisted plugins). pytest auto-loads entry-point plugins for EVERY task, and a
+    plugin from an ordinary package can crash at import (pilot v3: hydra-core's plugin imported omegaconf/antlr4 with a mismatching runtime in all 12 tasks)."""
+    stripped = []
+    for ep in Path(target).glob("*.dist-info/entry_points.txt"):
+        pkg = norm(ep.parent.name.split("-", 1)[0])   # "pytest_mock-3.14.0.dist-info" -> "pytest_mock"
+        text = ep.read_text(encoding="utf-8", errors="ignore")
+        if "[pytest11]" not in text or pkg in PLUGIN_WHITELIST:
+            continue
+        out, skip = [], False
+        for line in text.splitlines():
+            if line.strip().startswith("["):
+                skip = line.strip() == "[pytest11]"
+            if not skip:
+                out.append(line)
+        ep.write_text("\n".join(out) + "\n", encoding="utf-8")
+        stripped.append(pkg)
+    return sorted(stripped)
+
+
 def build_taskdeps(wheels_dir: Path, target: Path) -> dict:
     wheels = sorted(Path(wheels_dir).glob("*.whl"))
     kinds = {w: classify(w) for w in wheels}
     use = [str(w) for w, k in kinds.items() if k == "ok"]
     target.mkdir(parents=True, exist_ok=True)
     r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-index", "--no-deps", "--target", str(target), *use], capture_output=True, text=True)
-    return {"rc": r.returncode, "installed": len(use), "denied": sorted(w.name for w, k in kinds.items() if k == "deny"),
+    stripped = strip_pytest_entry_points(target) if r.returncode == 0 else []
+    return {"rc": r.returncode, "installed": len(use), "pytest_entry_points_stripped": stripped, "denied": sorted(w.name for w, k in kinds.items() if k == "deny"),
             "plugins_excluded": sorted(w.name for w, k in kinds.items() if k == "plugin"), "stderr_tail": (r.stderr or "")[-300:]}
