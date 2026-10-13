@@ -19,6 +19,8 @@ WORKER = (HERE / "spike_worker.py").read_text(encoding="utf-8").replace("\r\n", 
 
 RUN = '''import json, os, time, concurrent.futures as cf
 from pathlib import Path
+import subprocess, sys
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'virtualenv'], check=True)   # Kaggle's `python -m venv` is broken (ensurepip)
 exec(WORKER_SRC)   # defines run_task(task, work_root)
 WORK = Path('/tmp/spike'); WORK.mkdir(exist_ok=True)
 OUTDIR = Path('/kaggle/working'); OUTDIR.mkdir(exist_ok=True)

@@ -17,6 +17,7 @@ import sys
 import time
 from pathlib import Path
 
+ALIASES = {"yaml": "pyyaml", "PIL": "pillow", "cv2": "opencv-python-headless", "sklearn": "scikit-learn", "dateutil": "python-dateutil", "bs4": "beautifulsoup4", "attr": "attrs", "OpenSSL": "pyopenssl", "jwt": "pyjwt", "git": "gitpython", "magic": "python-magic", "serial": "pyserial", "usb": "pyusb"}
 STATUS = re.compile(r"^(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\s+(.+?)(?:\s+-\s+.*)?$", re.M)
 
 
@@ -68,9 +69,16 @@ def run_task(task, work_root, keep=False):
             res.update(verdict="clone_failed", reason=_tail(out, 300))
             return res
         # ---- venv + install
-        rc, out, dt = _run([sys.executable, "-m", "venv", str(vdir)], d, 300, env)
+        # Kaggle's image has a broken `ensurepip` (python -m venv fails), so use virtualenv, which brings its own seed wheels
+        rc, out, dt = (1, "forced", 0) if os.environ.get("G7_FORCE_VIRTUALENV") else _run([sys.executable, "-m", "venv", str(vdir)], d, 300, env)
         if rc != 0:
-            res.update(verdict="install_failed", reason="venv: " + _tail(out, 300))
+            shutil.rmtree(vdir, ignore_errors=True)
+            rc, out, dt = _run([sys.executable, "-m", "virtualenv", "-q", str(vdir)], d, 300, env)
+            if rc != 0 and "No module named virtualenv" in out:
+                _run([sys.executable, "-m", "pip", "install", "-q", "virtualenv"], d, 300, env)
+                rc, out, dt = _run([sys.executable, "-m", "virtualenv", "-q", str(vdir)], d, 300, env)
+        if rc != 0:
+            res.update(verdict="install_failed", reason="venv/virtualenv: " + _tail(out, 300))
             return res
         venv_bin = vdir / binname
         env["VIRTUAL_ENV"] = str(vdir)
@@ -88,6 +96,11 @@ def run_task(task, work_root, keep=False):
                 res["times"]["install"] = round(dt)
                 res.update(verdict="install_failed", reason=f"`{s}` rc={rc}: {_tail(o, 400)}")
                 return res
+        pkgs = [x for x in (ic.get("pip_packages") or []) if x]
+        if pkgs:
+            rc, o, dt2 = _run([vpy, "-m", "pip", "install", "-q", *pkgs], rdir, 900, env)
+            dt += dt2
+            res["pip_packages"] = {"n": len(pkgs), "rc": rc}
         res["times"]["install"] = round(dt)
         rc, out, _ = _run([vpy, "-m", "pip", "freeze"], rdir, 120, env)
         res["n_packages"] = len([l for l in out.splitlines() if l.strip()])
@@ -99,8 +112,23 @@ def run_task(task, work_root, keep=False):
                 res.update(verdict="patch_apply_failed", reason=f"{name}: {_tail(o, 300)}")
                 return res
         f2p, p2p = list(task["FAIL_TO_PASS"]), list(task["PASS_TO_PASS"])[:150]
-        base = [vpy, "-m", "pytest", "-rA", "--tb=no", "-q", "-p", "no:cacheprovider", "--timeout=300"]
-        rc, out_b, dt = _run(base + f2p, rdir, 1200, env)
+        base = [vpy, "-m", "pytest", "-rA", "--tb=line", "-q", "-p", "no:cacheprovider", "--timeout=300"]
+        added = []
+
+        def run_with_deps(ids, timeout):
+            """Run pytest; if collection dies on `No module named X`, pip install X and retry (max 4 times). This mimics a shared wheel set that holds test deps."""
+            for _ in range(5):
+                rc_, o_, dt_ = _run(base + ids, rdir, timeout, env)
+                miss = re.findall(r"No module named '([A-Za-z0-9_\-]+)", o_)
+                miss = [m for m in dict.fromkeys(miss) if m not in added and m.split(".")[0] not in added]
+                if rc_ == -999 or not miss or len(added) >= 8:
+                    return rc_, o_, dt_
+                for m in miss[:3]:
+                    added.append(m)
+                    _run([vpy, "-m", "pip", "install", "-q", ALIASES.get(m, m)], rdir, 300, env)
+            return rc_, o_, dt_
+
+        rc, out_b, dt = run_with_deps(f2p, 1200)
         res["times"]["tests_before"] = round(dt)
         sb = _statuses(out_b)
         if rc == -999:
@@ -115,7 +143,8 @@ def run_task(task, work_root, keep=False):
         if rc != 0:
             res.update(verdict="patch_apply_failed", reason="gold patch: " + _tail(o, 300))
             return res
-        rc, out_a, dt = _run(base + f2p + p2p, rdir, 1800, env)
+        rc, out_a, dt = run_with_deps(f2p + p2p, 1800)
+        res["extra_modules_installed"] = list(added)
         res["times"]["tests_after"] = round(dt)
         sa = _statuses(out_a)
         if rc == -999:
@@ -128,7 +157,8 @@ def run_task(task, work_root, keep=False):
             res.update(verdict="f2p_passes_before", reason=f"{len(passed_before)}/{len(f2p)} F2P already pass with only the test patch")
         elif len(f2p_ok) != len(f2p):
             bad = [(i, sa.get(i)) for i in f2p if sa.get(i) != "PASSED"][:3]
-            res.update(verdict="f2p_fails_after", reason=f"{bad} | {_tail(out_a, 300)}")
+            errs = [l for l in out_a.splitlines() if ("Error" in l or "error" in l) and "PASSED" not in l][:4]
+            res.update(verdict="f2p_fails_after", reason=f"{bad} | {' / '.join(errs)[:500]} | {_tail(out_a, 200)}")
         elif len(p2p_ok) != len(p2p):
             res.update(verdict="p2p_partial", reason=f"{len(p2p) - len(p2p_ok)}/{len(p2p)} P2P not passing after the gold patch")
         else:
