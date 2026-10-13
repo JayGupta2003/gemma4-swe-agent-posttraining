@@ -47,7 +47,8 @@ def run_task(task, work_root, keep=False):
     res = {"id": iid, "repo": repo, "python_requested": (task.get("install_config") or {}).get("python"), "times": {}}
     binname = "Scripts" if os.name == "nt" else "bin"
     env = dict(os.environ)
-    env.update({"PIP_DISABLE_PIP_VERSION_CHECK": "1", "GIT_TERMINAL_PROMPT": "0", "PYTHONDONTWRITEBYTECODE": "1"})
+    env.update({"PIP_DISABLE_PIP_VERSION_CHECK": "1", "GIT_TERMINAL_PROMPT": "0", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"})
+    env.pop("PYTHONPATH", None)   # Kaggle's PYTHONPATH carries a sitecustomize that imports `wrapt`, which breaks clean venvs and pip's isolated build envs
     for k, v in ((task.get("install_config") or {}).get("env_vars") or {}).items():
         if v is not None:
             env[k] = str(v)
@@ -84,7 +85,7 @@ def run_task(task, work_root, keep=False):
         env["VIRTUAL_ENV"] = str(vdir)
         env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
         vpy = str(venv_bin / ("python.exe" if os.name == "nt" else "python"))
-        rc, out, dt = _run([vpy, "-m", "pip", "install", "-q", "pytest", "pytest-timeout"], rdir, 600, env)
+        rc, out, dt = _run([vpy, "-m", "pip", "install", "-q", "pytest", "pytest-timeout", "wrapt"], rdir, 600, env)
         ic = task.get("install_config") or {}
         steps = list(ic.get("pre_install") or []) + ([ic["install"]] if ic.get("install") else ["pip install -e ."])
         install_out = ""
