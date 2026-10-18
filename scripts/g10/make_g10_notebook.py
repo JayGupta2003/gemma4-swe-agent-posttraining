@@ -31,10 +31,19 @@ assert [c["cell_type"] for c in cells] == ["markdown", "code", "markdown", "code
 # ---------------------------------------------------------------- SETUP (cell 3)
 s = txt[3]
 s = sub(s, "G2 = WORKING_DIR / 'g2'", "G2 = WORKING_DIR / 'g10'")
+# fail in the first seconds, not after the model load, if the machine is not the expected L4x4
+s = sub(s, "RESULTS = {'started': time.strftime('%Y-%m-%d %H:%M:%S')}\n",
+        "RESULTS = {'started': time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        "import torch\n"
+        "_gpus = [(torch.cuda.get_device_name(i), torch.cuda.get_device_capability(i)) for i in range(torch.cuda.device_count())]\n"
+        "print('GPUs:', _gpus)\n"
+        "assert len(_gpus) == 4 and all(c[0] >= 8 for _, c in _gpus), f'expected 4x L4 (compute capability >= 8), got {_gpus}'\n")
 s = sub(s, "'g2_summary.json'", "'g10_summary.json'")
 s = sub(s, "BUDGET_MIN = 235", "BUDGET_MIN = 300")
 s = sub(s, "DATA_DIR = Path('/kaggle/input/competitions/gemma-4-developer-agent')\n",
-        "POOL = Path(next(Path('/kaggle/input').rglob('tasks.jsonl'))).parent\nDATA_DIR = POOL\n"
+        "_tj = [p for p in Path('/kaggle/input').rglob('tasks.jsonl') if 'competitions' not in p.parts and (p.parent / 'snapshots').is_dir()]   # NOT the competition's own file\n"
+        "assert len(_tj) == 1, _tj\n"
+        "POOL = _tj[0].parent\nDATA_DIR = POOL\n"
         "assert (POOL / 'snapshots').is_dir() and (POOL / 'wheels').is_dir(), POOL\n"
         "# side directory with the task dependencies (see scripts/g9/taskdeps.py): must exist on sys.path BEFORE any sandbox is created\n"
         "exec(__TASKDEPS__)\n"
@@ -77,7 +86,10 @@ for i, c in enumerate(cells):
 
 (OUT / "g10.ipynb").write_text(json.dumps({"cells": cells, "metadata": SRC["metadata"], "nbformat": 4, "nbformat_minor": 5}, indent=1), encoding="utf-8")
 meta = json.loads((ROOT / "kaggle_assets" / "g2" / "kernel-metadata.json").read_text(encoding="utf-8"))
-meta.update({"id": "noobhunterjay/gemma-4-g10-rollouts", "title": "Gemma 4 G10 Rollouts", "code_file": "g10.ipynb", "competition_sources": [],
+# competition_sources MUST stay attached: the L4x4 machine is only granted to notebooks attached to the competition (G10 v1 dropped it and got a T4x2:
+# "Bfloat16 is only supported on GPUs with compute capability >= 8.0. Your Tesla T4 ..."). Consequence: the competition's own tasks.jsonl is mounted too.
+assert meta["competition_sources"] == ["gemma-4-developer-agent"] and meta["machine_shape"] == "NvidiaL4"
+meta.update({"id": "noobhunterjay/gemma-4-g10-rollouts", "title": "Gemma 4 G10 Rollouts", "code_file": "g10.ipynb",
              "kernel_sources": ["noobhunterjay/gemma-4-g9-build", "noobhunterjay/gemma-4-g9-gold"]})
 (OUT / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 print("wrote", OUT)

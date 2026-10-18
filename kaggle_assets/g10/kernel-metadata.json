@@ -19,7 +19,9 @@
     "noobhunterjay/gemma-4-g9-build",
     "noobhunterjay/gemma-4-g9-gold"
   ],
-  "competition_sources": [],
+  "competition_sources": [
+    "gemma-4-developer-agent"
+  ],
   "model_sources": [
     "google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2"
   ],
