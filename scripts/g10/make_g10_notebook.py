@@ -41,7 +41,8 @@ s = sub(s, "RESULTS = {'started': time.strftime('%Y-%m-%d %H:%M:%S')}\n",
 s = sub(s, "'g2_summary.json'", "'g10_summary.json'")
 s = sub(s, "BUDGET_MIN = 235", "BUDGET_MIN = 300")
 s = sub(s, "DATA_DIR = Path('/kaggle/input/competitions/gemma-4-developer-agent')\n",
-        "_tj = [p for p in Path('/kaggle/input').rglob('tasks.jsonl') if 'competitions' not in p.parts and (p.parent / 'snapshots').is_dir()]   # NOT the competition's own file\n"
+        "# the competition is mounted at /kaggle/input/gemma-4-developer-agent/ (observed in G10 v2) with its own tasks.jsonl; the pool is the g9-build kernel output\n"
+        "_tj = [p for p in Path('/kaggle/input').rglob('tasks.jsonl') if 'gemma-4-g9-build' in p.parts and (p.parent / 'snapshots').is_dir()]\n"
         "assert len(_tj) == 1, _tj\n"
         "POOL = _tj[0].parent\nDATA_DIR = POOL\n"
         "assert (POOL / 'snapshots').is_dir() and (POOL / 'wheels').is_dir(), POOL\n"
