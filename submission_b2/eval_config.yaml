@@ -1,0 +1,7 @@
+# B2 (2026-10-20): budget candidate. 8 minutes / 28 tool calls (the harness states both in the task message), 150 s single-command timeout.
+# Why: public teams at 0.22-0.24 report 8 min / 28-30 calls (forum 750496) against our 5 min / no call cap (0.13-0.15); a tool-call budget also bounds the 12 h total:
+# 28 calls x ~9 s (sequential scorer, thinking on) ~ 4.2 min + overhead ~ 5 min per task ~ 10 h for ~120 tasks; exceeding 12 h errors the whole submission.
+evaluation:
+  timeout_seconds: 150
+  max_tool_calls: 28
+  max_time_minutes: 8
