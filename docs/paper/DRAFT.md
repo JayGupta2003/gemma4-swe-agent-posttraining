@@ -24,11 +24,35 @@ Agent: Google ADK single agent with tools run_command, read_file, edit_file, wri
 
 *Local.* Two rounds of the same agent solve 25 and 28 of 75 tasks; 7 of the 30 tasks ever solved flip between rounds. With four attempts (two base rounds and two adapters), 43 tasks are never solved, 19 always solved, 13 mixed (17%). Outcomes are set mostly by the task, not by sampling, which caps what any learning from the model's own samples can achieve: tasks with solve probability 0 or 1 carry no contrast. We computed that 3 additional rounds over the 171-task pool would yield only ~20 matched success/failure pairs at temperature 0.2. [TEMPERATURE PROBE: temperature 1.0 changes the mixed fraction from 17% to X%.]
 
+![Figure 1](figures/fig1_bimodal.png)
+*Figure 1. Number of attempts (of four) that resolved each of 75 competition tasks. Blue: the 62 tasks whose outcome never changed.*
+
+| submission | per-task limits | public score |
+|---|---|---|
+| baseline | 5 min | 0.12 |
+| B1 | 5 min | 0.13, 0.15 |
+| B1 + G3 adapter | 5 min | 0.08 |
+| B2 | 8 min / 28 tool calls | 0.17 |
+
+*Table 1. Our public leaderboard scores (58 tasks; one task = 0.017).*
+
 ## 4. Where the clock goes
 
-In 171 pool attempts (5-minute cap), all 55 resolved attempts finished before the cap and all 86 capped attempts failed, including 51 that had written a patch (the harness verifies it; none passed). Capped attempts make fewer calls than successes (median 11 vs 14) but each is slower (19 s vs 12.6 s of model time), 34 of 86 never edited anything, and tool execution is negligible (2-8 s per attempt); the long gaps are context-compaction summaries. Model time per call is almost entirely decoding.
+In 171 pool attempts (5-minute cap), all 55 resolved attempts finished before the cap and all 86 capped attempts failed, including 51 that had written a patch (the harness verifies it; none passed). Capped attempts make fewer calls than successes (median 11 vs 14) but each is slower (18 s vs 12 s of model time per call), 34 of 86 never edited anything, and tool execution is negligible (2-8 s per attempt); the long gaps are context-compaction summaries. Model time per call is almost entirely decoding.
 
 Two controlled checks. *Smaller model:* the 12B variant decodes 2.1x faster (79.2 vs 37.5 tokens/s single stream) but writes 1.6-1.8x more per call, runs out of time more often (57/75 capped vs 44 and 39) and resolves 17/75 vs 25 and 28; it never solved a task the 31B missed. Capping its thinking at 2,048 tokens left the outcome unchanged (6/32 vs 6/32). *Shorter thinking for the 31B:* budgets of 2,048 and 1,024 cut the share of model time in turns over 2,000 tokens from 23% to 12% and 1.3%, made requests ~20% faster, and kept accuracy (12 and 11 of 32 vs 10 and 11) but did not change the capped share. Speed alone does not convert the bimodal middle into solutions; the remaining failures are mostly wrong fixes in the right place (community failure anatomy: 18 of 41 failed runs edited within 20 lines of the gold change) and never committing to an edit.
+
+![Figure 2](figures/fig2_clock.png)
+*Figure 2. 171 pool attempts by outcome: median model calls per attempt (left) and mean model seconds per call (right).*
+
+| | 31B | 12B |
+|---|---|---|
+| decode speed (tokens/s) | 37.5 | 79.2 |
+| completion tokens per call | 1x | 1.6-1.8x |
+| capped attempts (of 75) | 44 / 39 | 57 |
+| resolved (of 75) | 25 / 28 | 17 |
+
+*Table 2. 31B vs 12B on the 75 competition tasks.*
 
 ## 5. A pipeline for post-training the 31B model on four 24 GB GPUs
 
@@ -42,9 +66,15 @@ Two controlled checks. *Smaller model:* the 12B variant decodes 2.1x faster (79.
 
 *G3:* 70 sequences (0.83M tokens) from the 30 tasks the base solved, one epoch, evaluated on all 75 tasks (the trained tasks are exactly the base's solved set): 28/75, same as the base, 2 of 45 never-solved tasks solved (consistent with chance: 7 tasks flip between base rounds); leaderboard 0.08. *G11:* 71 sequences (0.87M tokens) from 54 tasks in 54 different repositories, two epochs, evaluated on the 75 competition tasks, all unseen: 22/75 (base 25 and 28), more capped attempts (50 vs 44 and 39), no task solved that the base never solved; training loss fell 0.076 -> 0.038, i.e. the model memorised its own successes. Other teams report the same with 314-2,000 teacher trajectories (Qwen3-Coder, DeepSeek) on the 31B. We pre-registered the decision rule (>=34/75 or fewer capped without losses) before each evaluation. [PREFERENCE: gate result and, if run, RPO result.]
 
+![Figure 3](figures/fig3_sft_nulls.png)
+*Figure 3. Tasks resolved of 75 (same harness, prompt and 5-minute cap) and number of capped attempts. Gray: base; blue: LoRA adapters.*
+
 ## 7. Building verified, harness-compatible tasks
 
 From the SWE-rebench filtered split (6,542 tasks) we selected 898 candidates (difficulty <= 2, <= 5 modified files, <= 10 target tests, <= 4 per repository, no competition repositories). A CPU notebook with internet validated each in a clean Python 3.12 environment (target tests fail with the test patch, pass with the gold patch): 318 valid + 43 nearly valid (40%), at ~216 tasks per hour. We then rebuilt snapshots in the competition's layout and a shared wheel set and ran the harness's own verification, which is stricter (all tests in the touched files must pass; a skipped required test fails): 176 of 359 gold patches pass and 5 also pass with an empty patch (dropped), leaving **171 tasks from 142 repositories**; the unchanged 31B resolves 55 (32%). Four pilots taught how the sandbox decides solvability: the subprocess sandbox never injects wheels, so dependencies come from the host; entries added through the environment's .pth files precede the system packages and silently override them; pytest auto-loads every package's pytest11 entry point, so a plugin from an unrelated dependency crashed all 12 pilot tasks until the entry points were stripped; and ~24% of real fixes are unpassable under the harness conventions (community audit).
+
+![Figure 4](figures/fig4_task_funnel.png)
+*Figure 4. From 898 SWE-rebench candidates to the 171-task pool.*
 
 ## 8. [Small model] E4B distillation
 

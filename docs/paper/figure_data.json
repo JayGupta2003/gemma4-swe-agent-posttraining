@@ -1,0 +1,46 @@
+{
+ "fig1_tasks_by_solved_attempts_of_4": {
+  "0": 43,
+  "1": 5,
+  "2": 2,
+  "3": 6,
+  "4": 19
+ },
+ "fig2_pool_round": {
+  "S": {
+   "n": 55,
+   "median_calls": 14,
+   "model_seconds_per_call": 12.2
+  },
+  "F": {
+   "n": 30,
+   "median_calls": 13.0,
+   "model_seconds_per_call": 13.0
+  },
+  "C": {
+   "n": 86,
+   "median_calls": 11.0,
+   "model_seconds_per_call": 18.2
+  }
+ },
+ "fig3_resolved_of_75": {
+  "base r1": 25,
+  "base r2": 28,
+  "G3 adapter": 28,
+  "G11 adapter": 22
+ },
+ "fig3_capped_of_75": {
+  "base r1": 44,
+  "base r2": 39,
+  "G3 adapter": 44,
+  "G11 adapter": 50
+ },
+ "fig4_funnel": {
+  "candidates (SWE-rebench filtered split,": 898,
+  "validated in a clean Python 3.12 venv": 361,
+  "snapshotted in the competition layout": 359,
+  "gold patch passes the harness check": 176,
+  "... and an empty patch does not (rollout pool)": 171,
+  "resolved by the unchanged 31B (5-min cap)": 55
+ }
+}
