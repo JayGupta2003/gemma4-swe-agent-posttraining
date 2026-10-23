@@ -12,6 +12,7 @@ ARMS = {
     "t1": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=4096, thinking_budget=2048),
     "t2": dict(temperature=1.0, top_p=0.95, top_k=64, max_output_tokens=4096, thinking_budget=2048),
     "t4": dict(temperature=1.0, top_p=0.95, top_k=64, max_output_tokens=8192, thinking_budget=4096),   # G13 probe: B1 settings except Gemma's usual sampling
+    "e4b": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=8192, thinking_budget=4096),   # G14a: E4B baseline with the B1/B2 sampling
     "t3": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=3072, thinking_budget=1024),   # G12 (31B): half of T1's thinking budget
 }
 
