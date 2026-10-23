@@ -7,7 +7,7 @@ Memory: sequence-chunked decoder layers (scripts/g1/gemma4_memfix.py, exact, ver
 on the L4x4 up to 18,432 tokens in G1d. The environment fixes found in G1 are kept: torchao hidden from peft, checkpoint staged to local disk by the notebook.
 
 Environment variables: G3_MODEL, G3_DATA, G3_OUT (required); G3_TINY=1 (tiny random model for local tests); G3_ACC (default 2); G3_LR (2e-4);
-G3_EPOCHS (1); G3_WARMUP (3 optimizer steps); G3_SEED (0); G3_MAXMEM (JSON per-GPU limits); G3_MAX_SEQS (use only the first N sequences, tests); G3_CKPT_EVERY (10).
+G3_EPOCHS (1); G3_HF_GC (1 = HF gradient checkpointing, for E4B/E2B); G3_TINY_PLE (1 = tiny test model with per-layer inputs); G3_WARMUP (3 optimizer steps); G3_SEED (0); G3_MAXMEM (JSON per-GPU limits); G3_MAX_SEQS (use only the first N sequences, tests); G3_CKPT_EVERY (10).
 """
 
 import contextlib
@@ -42,6 +42,8 @@ MAXMEM = json.loads(os.environ.get("G3_MAXMEM", "null"))
 MAX_SEQS = int(os.environ.get("G3_MAX_SEQS", "0"))
 CKPT_EVERY = int(os.environ.get("G3_CKPT_EVERY", "10"))
 TEST_MEMFRAC = os.environ.get("G3_TEST_MEMFRAC")
+HF_GC = os.environ.get("G3_HF_GC") == "1"       # HF gradient checkpointing: needed for models whose layers fall back to the stock forward (E4B/E2B: per-layer inputs, shared KV)
+TINY_PLE = os.environ.get("G3_TINY_PLE") == "1"  # tiny test model WITH per-layer inputs and shared-KV layers (E4B-like)
 TARGET_RE = r".*language_model\.layers\.\d+\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))"
 OUT.mkdir(parents=True, exist_ok=True)
 res: dict = {"stage": "start", "tiny": TINY, "acc": ACC, "lr": LR, "epochs": EPOCHS, "warmup": WARMUP, "seed": SEED,
@@ -67,8 +69,10 @@ def load_model():
     if TINY:
         from transformers import Gemma4Config, Gemma4TextConfig
         t = Gemma4TextConfig(vocab_size=1000, hidden_size=64, intermediate_size=128, num_hidden_layers=6, num_attention_heads=4, num_key_value_heads=2,
-                             head_dim=16, sliding_window=32, layer_types=["sliding_attention"] * 5 + ["full_attention"], final_logit_softcapping=30.0,
-                             hidden_size_per_layer_input=0, num_kv_shared_layers=0, use_double_wide_mlp=False, max_position_embeddings=65536)
+                             head_dim=16, sliding_window=32, layer_types=(["sliding_attention", "sliding_attention", "full_attention", "sliding_attention", "sliding_attention", "full_attention"] if TINY_PLE
+                                     else ["sliding_attention"] * 5 + ["full_attention"]), final_logit_softcapping=30.0,
+                             hidden_size_per_layer_input=(16 if TINY_PLE else 0), vocab_size_per_layer_input=1000, num_kv_shared_layers=(2 if TINY_PLE else 0),
+                             use_double_wide_mlp=False, max_position_embeddings=65536)
         cfg = Gemma4Config(text_config=t.to_dict(), vision_config=dict(hidden_size=32, intermediate_size=64, num_hidden_layers=1, num_attention_heads=2,
                            num_key_value_heads=2, head_dim=16, global_head_dim=16), audio_config=None)
         return cls._from_config(cfg, attn_implementation="sdpa").to(torch.bfloat16).to("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -98,6 +102,9 @@ def main() -> None:
         torch.cuda.set_per_process_memory_fraction(float(TEST_MEMFRAC))
     from peft import LoraConfig, get_peft_model
     model.config.use_cache = False
+    if HF_GC:
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        log("HF gradient checkpointing enabled")
     pm = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0, bias="none", target_modules=TARGET_RE, task_type="CAUSAL_LM"))
     params = [p for p in pm.parameters() if p.requires_grad]
     res["trainable_params_m"] = round(sum(p.numel() for p in params) / 1e6, 1)

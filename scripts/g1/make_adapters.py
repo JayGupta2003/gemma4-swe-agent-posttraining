@@ -20,7 +20,8 @@ from pathlib import Path
 import torch
 from safetensors.torch import load_file, save_file
 
-SCORER_MODEL = "google/gemma-4-31b-it-qat-w4a16-ct"
+import os
+SCORER_MODEL = os.environ.get("SCORER_MODEL", "google/gemma-4-31b-it-qat-w4a16-ct")   # e.g. google/gemma-4-e4b-it-qat-w4a16-ct
 KEY_RE = re.compile(r"^base_model\.model\.model\.language_model\.layers\.(\d+)\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))\.lora_(A|B)\.weight$")
 ATTN = ("q_proj", "k_proj", "v_proj", "o_proj")
 
