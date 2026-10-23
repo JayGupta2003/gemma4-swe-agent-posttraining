@@ -1,5 +1,7 @@
 # Paper outline (draft 2, restructured 2026-10-13 around post-training)
 
+> **2026-10-24: the working text is now `docs/paper/DRAFT.md` (draft 1, ~2,000 words, real numbers, E4B/temperature/preference placeholders). This outline is kept for the evidence ledger and schedule; the thesis was rewritten as: noise + bimodality, the clock, pipeline, honest LoRA nulls, verified-task construction, [E4B].**
+
 > Draft 1 (2026-10-04) was a pure measurement study. After the user's decision that post-training the 31B is the primary focus, and after G1-G3 (docs/STRATEGY.md), the paper is rebuilt around a **practical, reproducible post-training pipeline for a 4-bit-served 31B SWE agent under a sequential wall-clock budget**, reported with an honest null result and the measurements that explain it. Draft 1's measurement material is kept as supporting evidence (Section 5-7). Nothing here may be claimed beyond the ledger's HAVE/DONE rows.
 
 Deadline: **2026-11-12 23:59 UTC** for a *submitted* (not draft) Kaggle Writeup. Plan to submit by **Nov 10**.
