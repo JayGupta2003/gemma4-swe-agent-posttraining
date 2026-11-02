@@ -1,0 +1,116 @@
+{
+ "fig5_pool_round_outcomes": {
+  "p1": {
+   "C": 86,
+   "S": 55,
+   "F": 30
+  },
+  "p2": {
+   "C": 93,
+   "S": 55,
+   "F": 23
+  },
+  "p3": {
+   "C": 90,
+   "S": 52,
+   "F": 29
+  }
+ },
+ "fig5_tasks_by_rounds_solved_of_3": {
+  "0": 100,
+  "1": 14,
+  "2": 23,
+  "3": 34
+ },
+ "fig5_p1_vs_p2_flips": {
+  "tasks": 26,
+  "solved_vs_capped": 24
+ },
+ "fig6_small_model": [
+  {
+   "round": "31B base round 1",
+   "resolved": 25,
+   "patches_written": 41,
+   "capped": 44,
+   "mean_task_s": 274,
+   "median_calls": 16
+  },
+  {
+   "round": "31B base round 2",
+   "resolved": 28,
+   "patches_written": 47,
+   "capped": 39,
+   "mean_task_s": 269,
+   "median_calls": 16
+  },
+  {
+   "round": "E4B base 5-min prompt",
+   "resolved": 10,
+   "patches_written": 68,
+   "capped": 1,
+   "mean_task_s": 114,
+   "median_calls": 13
+  },
+  {
+   "round": "E4B base B2 prompt",
+   "resolved": 7,
+   "patches_written": 69,
+   "capped": 1,
+   "mean_task_s": 125,
+   "median_calls": 12
+  },
+  {
+   "round": "E4B base verify prompt",
+   "resolved": 8,
+   "patches_written": 68,
+   "capped": 0,
+   "mean_task_s": 117,
+   "median_calls": 12
+  },
+  {
+   "round": "E4B + LoRA (31B traces)",
+   "resolved": 9,
+   "patches_written": 30,
+   "capped": 44,
+   "mean_task_s": 393,
+   "median_calls": 33
+  }
+ ],
+ "table5_pairwise_flips": {
+  "base r1 (T 0.2)": {
+   "base r1 (T 0.2)": 0,
+   "base r2 (T 0.2)": 7,
+   "G3 adapter (T 0.2)": 5,
+   "G11 adapter (T 0.2)": 7,
+   "base T 1.0 (G13)": 10
+  },
+  "base r2 (T 0.2)": {
+   "base r1 (T 0.2)": 7,
+   "base r2 (T 0.2)": 0,
+   "G3 adapter (T 0.2)": 6,
+   "G11 adapter (T 0.2)": 8,
+   "base T 1.0 (G13)": 9
+  },
+  "G3 adapter (T 0.2)": {
+   "base r1 (T 0.2)": 5,
+   "base r2 (T 0.2)": 6,
+   "G3 adapter (T 0.2)": 0,
+   "G11 adapter (T 0.2)": 8,
+   "base T 1.0 (G13)": 9
+  },
+  "G11 adapter (T 0.2)": {
+   "base r1 (T 0.2)": 7,
+   "base r2 (T 0.2)": 8,
+   "G3 adapter (T 0.2)": 8,
+   "G11 adapter (T 0.2)": 0,
+   "base T 1.0 (G13)": 13
+  },
+  "base T 1.0 (G13)": {
+   "base r1 (T 0.2)": 10,
+   "base r2 (T 0.2)": 9,
+   "G3 adapter (T 0.2)": 9,
+   "G11 adapter (T 0.2)": 13,
+   "base T 1.0 (G13)": 0
+  }
+ }
+}

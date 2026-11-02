@@ -174,7 +174,7 @@ plt.close(fig)
 
 # ---------------------------------------------------------------- tables
 subs = [("baseline (starter prompt)", "5 min cap", "0.12"), ("B1", "5 min cap", "0.13 and 0.15"), ("G3 adapter on B1", "5 min cap", "0.08"),
-        ("B2", "8 min / 28 tool calls", "0.17"), ("B3 (B2 + thinking 2048)", "8 min / 28 tool calls", "pending")]
+        ("B2", "8 min / 28 tool calls", "0.17"), ("B3 (B2 + thinking 2048)", "8 min / 28 tool calls", "0.15"), ("E4B base (B2 prompt, no adapter)", "8 min / 28 tool calls", "0.06")]
 tab = ["## Table 1. Public leaderboard (58 tasks; one task = 0.017)", "", "| submission | budget | public score |", "|---|---|---|"] + [f"| {a} | {b} | {c} |" for a, b, c in subs]
 tab += ["", "## Table 2. Local rounds on the 75 competition tasks (same harness, prompt, 5-minute cap)", "", "| round | resolved | patches written | capped | LLM calls / task |", "|---|---|---|---|---|"]
 for n in names:

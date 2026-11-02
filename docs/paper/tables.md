@@ -6,7 +6,8 @@
 | B1 | 5 min cap | 0.13 and 0.15 |
 | G3 adapter on B1 | 5 min cap | 0.08 |
 | B2 | 8 min / 28 tool calls | 0.17 |
-| B3 (B2 + thinking 2048) | 8 min / 28 tool calls | pending |
+| B3 (B2 + thinking 2048) | 8 min / 28 tool calls | 0.15 |
+| E4B base (B2 prompt, no adapter) | 8 min / 28 tool calls | 0.06 |
 
 ## Table 2. Local rounds on the 75 competition tasks (same harness, prompt, 5-minute cap)
 

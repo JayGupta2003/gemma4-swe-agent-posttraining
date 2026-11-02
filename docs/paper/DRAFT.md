@@ -33,8 +33,13 @@ Agent: Google ADK single agent with tools run_command, read_file, edit_file, wri
 | B1 | 5 min | 0.13, 0.15 |
 | B1 + G3 adapter | 5 min | 0.08 |
 | B2 | 8 min / 28 tool calls | 0.17 |
+| B3 (B2 + shorter thinking) | 8 min / 28 tool calls | 0.15 |
+| E4B base, B2 prompt | 8 min / 28 tool calls | 0.06 |
 
 *Table 1. Our public leaderboard scores (58 tasks; one task = 0.017).*
+
+![Figure 5](figures/fig5_pool_rounds.png)
+*Figure 5. The 171-task pool in three rounds of the 31B (temperature 0.2, 1.0, 1.0; 5-minute cap). Left: outcomes. Right: in how many rounds each task is solved.*
 
 ## 4. Where the clock goes
 
@@ -81,6 +86,9 @@ From the SWE-rebench filtered split (6,542 tasks) we selected 898 candidates (di
 The competition's small-model bonus rewards the best private score with the 8B-parameter E4B (4-bit, LoRA allowed). With the same harness and an 8-minute / 28-call budget, the unmodified E4B resolves **10, 7 and 8 of 75** tasks under three prompts (the 5-minute prompt, the budget-aware prompt, and a reproduce-then-verify prompt); the three rounds differ on 5-8 tasks, their union is 14 tasks, and **every task any of them solves is a task the 31B solves at least once** (0 of the 43 the 31B never solves). It is fast (114-125 s per task, at most one capped attempt, median 12-13 calls, 68-69 patches written per round), so time is not its constraint; the verify prompt did not make it do more work (14.0 vs 13.1 calls). The unmodified E4B scores **0.06** on the public leaderboard.
 
 We then trained a LoRA (34.9 M parameters, 3.7x faster per token than the 31B) on the 71 31B-resolved pool sequences of Section 6 (the tokenizer and chat template are shared, so token-exact sequences transfer) and verified that vLLM applies E4B adapters. On the 75 competition tasks it resolves 9/75, but writes a patch in only 30 attempts (base 68) and hits the cap in 44 (base 1). The capture shows why: the adapted model explores until the 28-call budget is spent without editing, then calls `submit_patch` with an empty patch, which the harness accepts without ending the session, and repeats the call hundreds of times (up to 440 model calls per attempt; 393 s per task vs 114 s, which would exceed the 12-hour limit on ~120 tasks). Among the 31 attempts that did finish, 9 resolve (29%) against 5-6 for the base on the same tasks (17%); it solves four tasks no base round ever solves and loses five of the 14 tasks the base ever solves. Precision rises, recall falls and the total does not move: as for the 31B, SFT shifts the behaviour distribution rather than adding capability, and any adapter needs a cap on model calls.
+
+![Figure 6](figures/fig6_small_model.png)
+*Figure 6. Tasks resolved of 75 by the 31B and the E4B, with patches written and capped attempts under each bar.*
 
 ## 9. Related work
 
