@@ -148,6 +148,17 @@ class EndToEndTests(unittest.TestCase):
             t = load_file(str(tmp / "out" / "adapter_full" / "adapter_model.safetensors"))
             self.assertGreater(max(v.float().abs().max().item() for k, v in t.items() if "lora_B" in k), 0.0)
 
+    def test_time_limit_stops_after_a_step_and_still_saves_the_adapter(self):
+        rng = random.Random(2)
+        pairs = [make_pair(rng, task=f"t{i}") for i in range(4)]
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            m = self.run_main(tmp, pairs, RPO_MAX_SECONDS="0.0001")
+            self.assertEqual(m["stage"], "done")
+            self.assertEqual(len(m["steps"]), 1)                       # at least one step, then the limit
+            self.assertEqual(m["stopped_early"]["at_step"], 1)
+            self.assertTrue((tmp / "out" / "adapter_full" / "adapter_model.safetensors").exists())
+
     def test_kind_filter(self):
         rng = random.Random(1)
         pairs = [make_pair(rng, kind="s_vs_c", task="a"), make_pair(rng, kind="within_s", task="b"), make_pair(rng, kind="s_vs_f", task="c")]

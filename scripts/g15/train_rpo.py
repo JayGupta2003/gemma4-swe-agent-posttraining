@@ -11,7 +11,8 @@ c * log p(y) (c detached). tests/test_train_rpo.py checks that this equals the p
 Input rows (pairs.jsonl): {"task", "kind", "chosen": {"input_ids", "loss_spans", "n_loss_tokens"}, "rejected": {...}}.
 Environment: RPO_MODEL, RPO_DATA, RPO_OUT (required); RPO_BETA (0.1), RPO_ALPHA (1.0), RPO_NORM (0), RPO_ACC (2 pairs per optimizer step), RPO_LR (2e-5), RPO_EPOCHS (2), RPO_WARMUP (2),
 RPO_SEED (0), RPO_HF_GC (1 = HF gradient checkpointing), RPO_TINY (1 = tiny random model for tests), RPO_TINY_PLE (1 = tiny model with per-layer inputs), RPO_MAXMEM (JSON per-GPU limits),
-RPO_CKPT_EVERY (10 optimizer steps), RPO_KINDS (comma list, default all), RPO_MAX_PAIRS (0 = all).
+RPO_CKPT_EVERY (10 optimizer steps), RPO_KINDS (comma list, default all), RPO_MAX_PAIRS (0 = all), RPO_MAX_SECONDS (0 = unlimited: stop after the current optimizer step once this much
+training time has passed, then save the adapter; the reference pass is not counted).
 """
 
 import contextlib
@@ -148,6 +149,7 @@ def main() -> None:
     ACC, LR, EPOCHS, WARMUP, SEED = int(E("RPO_ACC", "2")), float(E("RPO_LR", "2e-5")), int(E("RPO_EPOCHS", "2")), int(E("RPO_WARMUP", "2")), int(E("RPO_SEED", "0"))
     TINY, TINY_PLE, HF_GC = E("RPO_TINY") == "1", E("RPO_TINY_PLE") == "1", E("RPO_HF_GC") == "1"
     MAXMEM, CKPT_EVERY, MAX_PAIRS = json.loads(E("RPO_MAXMEM", "null")), int(E("RPO_CKPT_EVERY", "10")), int(E("RPO_MAX_PAIRS", "0"))
+    MAX_SECONDS = float(E("RPO_MAX_SECONDS", "0"))
     KINDS = set(E("RPO_KINDS", "").split(",")) - {""}
     OUT.mkdir(parents=True, exist_ok=True)
     res = {"stage": "start", "beta": BETA, "alpha": ALPHA, "norm": NORM, "acc": ACC, "lr": LR, "epochs": EPOCHS, "warmup": WARMUP, "seed": SEED, "tiny": TINY,
@@ -211,6 +213,10 @@ def main() -> None:
         torch.cuda.reset_peak_memory_stats(i)
     t_train0, tok_done = time.perf_counter(), 0
     for step, grp in enumerate(groups):
+        if MAX_SECONDS and step > 0 and time.perf_counter() - t_train0 > MAX_SECONDS:
+            res["stopped_early"] = {"at_step": step, "of": total_steps, "after_seconds": round(time.perf_counter() - t_train0)}
+            log("time limit reached:", res["stopped_early"])
+            break
         lr = lr_at(step, total_steps)
         for g in opt.param_groups:
             g["lr"] = lr
