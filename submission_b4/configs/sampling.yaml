@@ -1,0 +1,16 @@
+# B3 (2026-10-23): G12 arm T1 (31B, 32 tasks: resolved 12 vs control 10/11, long-turn time share 23% -> 12%, request time -20%, no accuracy loss).
+# 4096 = budget 2048 + soft overshoot (~900) + legitimate non-thinking output (<= ~1,300 tokens).
+# max_output_tokens was 16384 -- half the model's 32,768-token context reserved for
+# a single output turn, leaving too little room for conversation history to grow
+# across turns. Run 4 (eval_config.yaml removed as of the previous commit, so this
+# was the only sampling-level cap left) crashed rich_3944 outright with
+# litellm.ContextWindowExceededError once accumulated history + this reservation
+# exceeded 32768 -- a hard crash that discards the task, not a graceful budget stop.
+# Lowered to 8192, matching the value both actually-scoring public community
+# submissions use.
+temperature: 0.2
+top_p: 0.95
+max_output_tokens: 4096
+thinking_config:
+  thinking_budget: 2048
+  include_thoughts: true

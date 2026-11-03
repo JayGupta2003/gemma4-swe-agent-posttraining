@@ -1,0 +1,8 @@
+# B4 (2026-11-04) = B3 (8 min, thinking budget 2048 / output 4096, 150 s single-command timeout) with the tool-call budget raised 28 -> 34.
+# Why: G19 (B2 agent, sequential like the scorer, 24 tasks) hit the 28-tool-call cap in 9/24 tasks, 6 of them with an EMPTY patch and 4 with 3-5 minutes still left;
+# in uncapped rounds ~24% of attempts that went past 28 calls still resolved. 12 h estimate: B2 sequential mean 299 s/task; B3's shorter thinking cuts request time ~20%
+# (G12) -> ~245 s; +6 calls (~45 s) on the ~37% call-capped tasks -> ~262 s + ~10 s overhead ~ 9.1 h for ~120 tasks.
+evaluation:
+  timeout_seconds: 150
+  max_tool_calls: 34
+  max_time_minutes: 8

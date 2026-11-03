@@ -1,0 +1,22 @@
+name: swe_scaffold_v6_b4
+model: gemma-4-31b-it-qat-w4a16-ct
+instruction: !include prompts/system.md
+tools:
+  # search_similar_code deliberately excluded: it returns a matched node's full,
+  # uncapped source (one community-measured real call returned 259,000 chars for
+  # a single query, ~8x the 32,768-token context window). That overflow is an
+  # uncaught error that discards the task's patch even after submit_patch()
+  # already succeeded -- not worth the risk given get_code_neighbors/subgraph
+  # plus run_command grep cover the same ground more safely.
+  - get_code_neighbors
+  - get_code_subgraph
+  - read_file
+  - edit_file
+  - write_file
+  - run_command
+  - get_status
+  - submit_patch
+  - agent_tool:
+      config_path: sub_agents/code_analyzer.yaml
+      skip_summarization: false
+generate_content_config: !include configs/sampling.yaml
