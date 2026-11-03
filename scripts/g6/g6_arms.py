@@ -15,6 +15,7 @@ ARMS = {
     "e4b": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=8192, thinking_budget=4096),   # G14a: E4B baseline with the B1/B2 sampling
     "e4b_b2": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=8192, thinking_budget=4096),   # G14c: E4B, B2 prompt (budget-agnostic)
     "e4b_v": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=8192, thinking_budget=4096),   # G14c: E4B, B2 prompt + reproduce-then-verify schedule
+    "b2seq": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=8192, thinking_budget=4096),   # G19 (31B): the submitted B2 sampling, run at concurrency 1
     "t3": dict(temperature=0.2, top_p=0.95, top_k=None, max_output_tokens=3072, thinking_budget=1024),   # G12 (31B): half of T1's thinking budget
 }
 
