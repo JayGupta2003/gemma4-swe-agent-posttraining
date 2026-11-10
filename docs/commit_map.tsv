@@ -1,0 +1,152 @@
+# Commit hashes cited in docs/STRATEGY.md refer to the original local history. Before publication the history was rewritten:
+# (1) commit messages lost their tool-generated trailer lines (subjects, bodies, authors and dates unchanged);
+# (2) in the 2026-10-13 commit 'G8: launch CPU task-validation job' the two notebooks kaggle_assets/g8_scale_{0,1}/scale.ipynb, which then
+#     embedded ~7 MB of SWE-rebench task text each, are replaced by the 14 KB versions of the next commit (the data moved to a private Kaggle
+#     dataset there); the embedded task text included an example access token from Microsoft's documentation quoted in a public PyJWT issue.
+# All other file contents are unchanged. This changed every hash from that commit on.
+# old_hash	new_hash	date	subject
+3275af3	3275af3	2026-09-29	Initial project scaffold and strategy doc
+60bc264	60bc264	2026-09-29	Add verified harness mechanics from HARNESS_README.md
+01a92cb	01a92cb	2026-09-29	Add script to verify gold patches resolve under the local sandbox harness
+75764e1	75764e1	2026-09-29	Ignore local eval run artifacts (submission_drafts/, stray log files)
+3cc1555	3cc1555	2026-09-29	Fix Windows cp1252 crash in gold-patch checker, capture test output for diagnostics
+93683a1	93683a1	2026-09-29	Document and automate the missing typing_inspection wheel fix; fastapi resolution 1/67 -> 10/67
+0fc2562	0fc2562	2026-09-29	Document pytest-httpbin blocklist finding and confirm stable 52/129 baseline
+28580bb	28580bb	2026-09-29	Add Workstream 1 agent scaffold, LM Studio local testing setup, and Windows/Docker npipe flakiness writeup
+420cf24	420cf24	2026-09-29	First competition submission (56682704); save official getting-started notebook as reference for real-31B testing
+120abda	120abda	2026-09-29	Ignore data_extra/ (external community datasets)
+a733c7b	a733c7b	2026-09-29	Add era-aware, self-exclusive dependency resolution for external task pools (SWE-Pallets-X)
+7ef253c	7ef253c	2026-09-30	Document SWE-Pallets-X verification results: 213/476 resolved, combined pool now 265 tasks
+41a5bac	5e3568a	2026-09-30	Add rollout-collection driver for SFT trajectory generation (Workstream 2)
+8678533	b77657e	2026-10-01	Fix graph-tool prompt guidance; correct and fix the Windows read_file/edit_file bug
+3ee2294	a80027e	2026-10-01	Fix eval_config.yaml: submission 56682704 timed out, not just scored low
+b94d879	c4d4f23	2026-10-01	Document resubmission 56717963 with the tightened eval_config.yaml
+46b948c	5e46425	2026-10-01	Stop tuning eval_config.yaml numbers; fix the actual causes of agent looping
+786b978	c0b9314	2026-10-01	Fix context-overflow crash; reintroduce eval_config.yaml with data-informed time-only cap
+1c6590f	d982f26	2026-10-01	Document runs 6-7 results and submission 56752702
+756f0ae	2e45446	2026-10-01	Close a real validation gap: use Evaluator.run(), not a manual task loop
+21dcb00	bf6c0a7	2026-10-01	Add bulk rollout-collection notebook: real SFT trajectories at scale
+7861b37	1ac55c0	2026-10-02	Document the Kaggle outage finding and the first real SFT rollout collection run
+b2aea67	4ed5667	2026-10-03	Lower max_time_minutes 6->5 for submission 4 (56780281); document sequential-scorer facts
+70e1ade	458ee67	2026-10-03	Find root cause of failed submissions: PowerShell Compress-Archive wrote backslash zip entries
+9eb11e3	a8521c7	2026-10-03	Add pinned-artifact auto-submit watcher for the next free slot
+4383d0c	914894f	2026-10-04	Record first real score (0.12, submission 56789021) and confirm the zip-packaging root cause
+3ac06ad	8f98a4b	2026-10-04	Plan and launch Experiment 1: scaffold-efficiency A/B on the real 31B
+7290bf5	9a75f03	2026-10-04	Record Experiment 1 results: no arm met the pre-registered bar; mechanism findings
+51ac6af	36eb08f	2026-10-04	Near-miss analysis and CPU-only gold-check notebook to grow the dev pool
+332825c	f2ad434	2026-10-04	Record gold-check result: 75/129 public tasks pass their reference patch in Kaggle's env
+ef9a34c	1874a48	2026-10-04	Save per-task gold pass/fail from Kaggle env (usable dev pool = 75)
+b95e2c1	53cdd3c	2026-10-04	Prepare Experiment 2 (prompt ladder, 48 fresh tasks) offline; generalize analyzer
+91e60a4	9fdbbb2	2026-10-04	Add generated Exp2 notebook and kernel metadata
+b608404	444e21d	2026-10-04	Draft paper outline against the paper-track rubric; correct fastapi failure attribution (33/36 missing modules)
+62a6b45	8cbb5bf	2026-10-04	Launch Experiment 2 on Kaggle (kernel queued)
+5dc5f65	feda3f7	2026-10-04	Record strategy review: rules, leaderboard, forum findings, cap sensitivity
+d410488	220bc53	2026-10-04	Post-training plan (user decision), CPU training-env check, correct throughput estimate
+0986071	e26e4c4	2026-10-04	Add train-env-check notebook assets
+e2f7c86	d6cbdbd	2026-10-05	Record Experiment 2 results: no arm met the bar; edit-early mechanism replicated
+43cc567	cd743e9	2026-10-05	G1 spike: training script, adapter post-processing, serving probes, notebook (tested locally on tiny model and mock server); launch
+cfaf2a0	d04d0e0	2026-10-05	G1 run 1 findings and fixes: 31B chat-template prefix handling, 16k training, reuse baseline, probe fix
+700bb49	d7e3e31	2026-10-05	G1 run 2 findings: checkpoint loading stalled; add CPU IO benchmark
+ccf48a7	cd504a9	2026-10-05	G1: stage checkpoint to local disk in parallel, milestone-supervised training, 110-min watchdog (tested locally)
+ce73300	0b39548	2026-10-06	G1: hide incompatible torchao from peft (reproduced and verified locally); record run 3
+053133f	74cff27	2026-10-06	G1b: memory-bounded chunked attention + chunked MLP (verified exact locally), diagnostic + ladder training stage; record run 4
+aa9980f	2edfaa0	2026-10-06	G1c: train first, activation offload (verified identical grads), OOM-poisoning fix, dry-run harness; record run 5 (attention diagnosis refuted)
+dcaf61d	3db632b	2026-10-07	Record G1 final verdict: training works, sequence-length ceiling (~10k) vs 15.5k-token trajectories is the blocker
+8be35c9	b55d29c	2026-10-07	Option D part B: sequence-chunked decoder layer (exact at real dims), local real-geometry profile, G1d notebook; findings on thought retention and token composition
+4a9c385	029a19e	2026-10-07	Record G1d: chunked layers lift training ceiling to 18,432 tokens; all G1 gates pass
+a82c460	ae9dd45	2026-10-07	Prepare Experiment 3 (token-lean scaffold): generator, arms, notebook, analyzer exp3 mode
+a594a54	84bd2a6	2026-10-07	Launch Experiment 3 (token-lean scaffold)
+356c669	1b42d56	2026-10-07	Record Exp3 results: lean scaffold rejected; identical-prompt rerun shows 23 vs 18 resolved (noise floor); evaluation budget is the bottleneck
+4a065dd	9cdc3a5	2026-10-07	Submit B1 probe (56917532): submission_b1, pinned-zip submit tooling, Linux zip-check notebook; record upload-name lesson
+c6f684d	ad23975	2026-10-08	Record B1 probe ERROR (platform-wide system error wave)
+ff9e9d4	e75619a	2026-10-08	Resubmit B1 probe as 56962726
+03cb776	78245a2	2026-10-11	Record B1 submission scores (0.13 rerun, 0.15 resubmit) vs baseline 0.12; add check_submissions.py
+53f539c	44108df	2026-10-11	G2 data collection: exact request/response capture proxy (tested), notebook with smoke gate, plan and quota budget
+d83ad45	86a7b2c	2026-10-11	Launch G2 data collection
+ab0d629	4a44fc7	2026-10-11	Port notebooks to the 2026-10-09 wheelhouse (swegemma 0.2.11 / adk_submission 0.2.13): discover_declared_models, new zip-check registry
+f19de70	aefb465	2026-10-11	Record wheelhouse change (swegemma 0.2.11) and G2 relaunch
+0caadaf	297bb01	2026-10-11	G2 results: capture analysis, SFT sequence builder (70 sequences / 30 tasks), new-harness baseline
+1976d75	dda3216	2026-10-12	G3: LoRA SFT script (tested on tiny model), adapter wiring check, notebook with fail-fast checks and adapter evaluation round
+87dcea5	1d6517d	2026-10-12	Launch G3 (LoRA SFT on G2 sequences, no hold-out, 1 epoch) and record the plan and decision rule
+59cf9b6	772ea45	2026-10-12	G3 results: pipeline validated, adapter gives no measurable change (28/75 vs base 25/28)
+ee42e03	4c4bf24	2026-10-12	Submit G3 adapter (ref 57109472): adapter-aware Linux zip check passed
+a55e5c5	4a4de71	2026-10-13	Round comparison (finish-rate finding), forum read (smaller Gemma variants allowed), paper outline draft 2
+18699ae	086428f	2026-10-13	G5: first GPU test of the 12B variant (base model, vLLM overrides + guarded loader patch, decode probe, smoke gate, one 75-task round); CPU serve-check notebook
+4e12315	6dd3932	2026-10-13	G5: probe uses the served model path and is non-fatal (v1 died on my wrong model name)
+105aed6	1b6a887	2026-10-13	G5 results: 12B serves, 2.1x decode but runaway thinking eats the gain (17/75)
+39c089f	650d121	2026-10-13	G6 design: config screen (thinking budget / output cap / sampling) to cut wasted generation; screen task list
+d544306	42549cc	2026-10-13	G6: 12B config-screen notebook (arms T1/T2, 32 tasks), preflight against wheelhouse 0.2.13/0.2.11, request-level config gate
+f914026	35a90c0	2026-10-13	Launch G6 T1-only 12B config screen
+ac94a7c	77cfbaa	2026-10-13	Record G6-T1 launch, dataset survey, 12B training-feasibility read
+466eccf	eb009cc	2026-10-13	Profile nebius OpenHands trajectories: not usable whole; plan for validated-task rollouts
+bc84a22	860a246	2026-10-13	G7 spike: SWE-rebench task selection, worker, CPU/internet notebook (20 tasks)
+75ed1c5	59719cd	2026-10-13	G7 spike v2: virtualenv (Kaggle venv/ensurepip is broken), pip_packages, missing-module retry
+109f59c	3b44f19	2026-10-13	G6-T1 result (no effect on the 12B), 12B verdict, G7 spike results
+46436a2	727007e	2026-10-13	G8: launch CPU task-validation job (898 SWE-rebench candidates in 2 shards)
+20886be	06c7993	2026-10-13	G8 correction: tasks in a private dataset (7 MB notebooks are rejected); both shards actually pushed
+5ffbe71	f76d120	2026-10-13	G8 result: 361 usable new tasks from 270 repos (CPU only); next steps toward a harness-ready pool
+a6289f1	b72a7b9	2026-10-13	G9: harness-ready pool builder (snapshots, shared wheels, tasks.jsonl) and harness gold-check notebook
+debe0f8	49cef4d	2026-10-13	G9 gold check: unpack the shared wheels into a side dir on sys.path (subprocess mode never injects them)
+b8cf460	ee4d410	2026-10-13	G9 gold: taskdeps side dir excludes pytest, its core deps and pytest-* plugins (they override/auto-load host ones)
+2d48167	cb79765	2026-10-13	G9 gold: strip [pytest11] entry points from the side dir (hydra-core's plugin crashed every task)
+179af3c	d8a1a10	2026-10-13	G9 gold: pilot v4 passed 8/12 (empty patch never resolves); launch the full 359-task run
+2ca3aa6	bd719d9	2026-10-13	G9 result: 171-task harness-ready rollout pool (gold 176/359, 5 invalid via empty patch); sandbox lessons
+ea37905	5176149	2026-10-18	G10: launch 31B rollouts over the 171-task pool (taskdeps side dir, stub graphs for prompt parity, capture proxy)
+2aa0090	84f51e2	2026-10-18	Record adapter LB 0.08 and G10 launch; general SFT builder (reproduces G2 exactly)
+07c645a	c210257	2026-10-19	G10 fix: keep the competition attached (L4x4 is only granted to competition notebooks; v1 got a T4x2), assert 4x L4 up front, ignore the competition tasks.jsonl
+382238f	1f58a6c	2026-10-19	Record G10 v1 failure cause (competition_sources) and the kaggle quota command
+68d3871	48d1f42	2026-10-19	G10 fix 2: select the pool tasks.jsonl by its g9-build mount (the competition mounts at /kaggle/input/gemma-4-developer-agent); tested against the observed layout
+752434b	704c2e9	2026-10-19	G10 result: 55/171 pool tasks resolved from 54 repos; train-on-pool / eval-on-competition decision
+959157a	c728639	2026-10-19	G11: LoRA SFT on resolved pool attempts (71 sequences, 54 repos) x2 epochs + 75-task evaluation; competition mount discovered, not hard-coded
+625f950	6760bbd	2026-10-19	Record G11 launch, dataset, decision rule and the push-chain slip
+ac4fde5	785409e	2026-10-20	G11 result: null (22/75 vs base 25/28) with more cap hits; SFT-on-own-successes closed
+c1f3320	c72b19a	2026-10-20	G12: 31B thinking-budget screen (arms T1 2048/4096 and T3 1024/3072, checked config gate, competition mount discovered)
+7304b6e	4f51554	2026-10-20	Record G12 launch and leaderboard/forum calibration (0.22 plateau, community budgets, others' LoRA results)
+0dee7af	30da2a0	2026-10-20	B2 budget candidate (8 min / 28 tool calls / 150 s command timeout, budget-agnostic prompt) and its Linux zip check
+307c7ed	134b6a8	2026-10-20	Preference-run design (gated), feasibility data (bimodal outcomes, where the clock goes), B2 submission record
+570619b	76beba6	2026-10-20	G12 result: shorter thinking is free (no accuracy loss, -20% latency) but does not change the cap rate
+b7810d1	65b8392	2026-10-23	Record B2 leaderboard result 0.17
+518f30f	28f5386	2026-10-23	B3 candidate (B2 + shorter thinking) and its Linux zip check
+00f2371	2a3f04d	2026-10-23	G13: temperature-probe notebook (31B, all 75 tasks, arm t4 = B1 settings at temperature 1.0 / top_k 64), prepared not launched
+503a674	cb3813b	2026-10-23	Record B3 submission and the prepared G13 probe
+67f8901	ffb0557	2026-10-24	Forum re-read: small-model bonus, noise findings, community SFT nulls, prize map
+9974940	4713225	2026-10-24	E4B path: trainer switch for HF gradient checkpointing + tiny PLE test, make_adapters model id, CPU dry-run notebook
+a981340	487788d	2026-10-24	Paper: draft 1 with real numbers (verified citations), word-count script; outline points to it
+a322a7d	b44eb84	2026-10-24	G14a E4B baseline notebook (prepared, not launched); record user decision and prepared items
+75ac355	0163aa2	2026-10-24	Paper: reproducible figures (bimodality, clock, SFT nulls, task funnel) and tables, embedded in draft; fix per-call seconds to match computed values
+d4052b1	e4885a6	2026-10-24	Add MIT license (user choice); record paper track joined and figures done
+aa81a6d	4c1ef87	2026-10-24	Record G13 temperature probe and E4B dry-run results
+16060b4	85f9347	2026-10-24	Record B3 score 0.15 and quota refresh
+a36fb83	3b8d27b	2026-10-24	Record G14a launch
+c1612e0	da7fb6c	2026-10-25	Record G14a E4B baseline result (10/75)
+17aca68	922343e	2026-10-25	G14c: two E4B prompt arms (B2 prompt, B2 + reproduce-then-verify), pushed
+6937ae8	5227b79	2026-10-25	G14b0 E4B LoRA canary check (pushed) and G14b E4B distillation notebook (prepared, not launched)
+5bc3683	46f84eb	2026-10-25	Record G14b0 canary pass and G14c E4B prompt-arm results (noise)
+bb52956	31274f0	2026-10-25	Record G14b launch
+e97aed5	41c1a9a	2026-10-25	Record G14b E4B distillation result and failure mechanism
+c1b0c7d	c67b78a	2026-10-25	Submit E4B base (ref 57637688): submission_e4b, zip check, strategy log
+9966215	506f3b4	2026-10-25	G15: pool round p2 at temperature 1.0 (preference-run gate), launched
+3bc02de	5b1a30f	2026-10-27	Record E4B score 0.06 and G15 (T=1.0 pool round) gate result
+41dd17c	984188e	2026-10-27	G16: pool round p3 at temperature 1.0 (preference pairs), launched
+597b92d	5720a7e	2026-10-27	Preference pair builder with unit tests; real p1+p2 dry run (23 main pairs)
+9a905d2	aa248ab	2026-10-27	Record G16 (p3) result and the pair-count gate (57 pairs)
+2678ae3	0552d25	2026-10-27	Fix unusable-segment count in the G16 note
+7c19107	5a92c1d	2026-10-27	RPO preference trainer (two-pass DPO + NLL on chosen, LoRA) with 7 tests on a tiny Gemma 4
+3a69c82	788563c	2026-10-27	Record RPO trainer and tests in the strategy log
+597f8af	498acf4	2026-11-02	G17: RPO training of the 31B on 28 budgeted preference pairs, launched; cost correction
+0d10f06	4197fdf	2026-11-02	Paper draft 2: E4B section, temperature and mixedness results, preference pairs; licence MIT
+cb82b20	e091637	2026-11-03	Paper: figures 5 (pool rounds) and 6 (small model), tables 4-6, Table 1 with B3 and E4B scores
+623360b	a0c2094	2026-11-03	G17 result: RPO on 28 pairs is a null (26/75 vs base 25/28); paper section 6 and abstract filled
+6eddb82	f1c99ae	2026-11-03	G18 (E4B on hindsight-pruned teacher episodes) and G19 (31B B2 at concurrency 1): converter, exact renderer, dataset builder, notebooks, tests
+5d4766d	dd8bacb	2026-11-04	G18 (E4B teacher distillation) negative: 3/75 vs base 7/75; G19 (31B sequential B2) 9/24, scorer regime does not hurt
+93826de	4aeedfa	2026-11-04	Review: G19 call-cap correction, G18 failure traced to hindsight leak in read windows (92% edit failures), E4B and 31B share exact token space
+15716ea	7f2ef95	2026-11-04	G20: on-policy distillation data stage (E4B pool rollouts + 31B prompt_logprobs scoring, opd_score.py + tests); B4 = B3 with 34 tool calls
+5fcb2be	0304166	2026-11-04	Record G20 launch and B4 submission
+15cabf8	ac9f0fa	2026-11-04	G20 result (student round ok, teacher OOM) and G20b scoring-only rerun
+335fa86	b547005	2026-11-04	G20b: 31B teacher scores for all 244 E4B leaves, validated against the capture
+86277c9	6c4183f	2026-11-04	OPD trainer: coarse top-k+rest KL loss, train_opd (train_g3 with the loss swapped), dataset builder, tests (teacher==student gives loss 0)
+208064a	327cdf3	2026-11-04	G21 notebook (E4B on-policy distillation iteration 1 + 75-task eval), dataset uploaded, pre-registered rule
+905588a	4c70a1f	2026-11-05	B4 result: exceeded the 12 h runtime limit (34 tool calls), no score
+72dbc30	3de353b	2026-11-05	B2 rerun submitted (runtime reliability check after B4 overran)
+329cd52	22b8e99	2026-11-10	B2 rerun 0.13 (identical zip scored 0.17); G21 launched
+975a45d	2e43929	2026-11-10	Public README: what is here, data policy, reproduction, licence
