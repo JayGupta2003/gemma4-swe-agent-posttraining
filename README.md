@@ -35,10 +35,22 @@ Captures and trained adapters are not included (they contain competition task te
 
 ## Reproducing
 
-1. Join the competition, attach the wheelhouse dataset `metric/gemma-4-developer-agent-wheelhouse` and the Gemma 4 models, and use an L4x4 session attached to the competition (L4s are only granted to notebooks with the competition as a source).
-2. Generate a notebook, e.g. `python scripts/g21/make_g21_notebook.py`, upload its dataset, then `kaggle kernels push -p kaggle_assets/g21`.
-3. Local tests (no GPU needed for most): `python scripts/g20/test_opd_score.py`, `python scripts/g20/test_train_opd.py` (needs transformers 5.x + peft), `python scripts/g15/test_build_pairs.py`.
+**Compute.** Every GPU run is a Kaggle notebook on 4x NVIDIA L4 (24 GB each), offline. L4s are only granted to notebooks that list the competition as a data source (`competition_sources` in each `kernel-metadata.json`); otherwise Kaggle silently assigns a T4x2 and vLLM fails on bf16. Kaggle bills L4x4 at 2x, and the weekly quota is 30 h, so one 31B training run plus evaluation (~5 h wall) uses about a third of a week.
+
+**Environment.** The notebooks install the competition harness from the dataset `metric/gemma-4-developer-agent-wheelhouse` (swegemma 0.2.11, adk_submission 0.2.13, vLLM 0.19.1; Kaggle image pinned in each `kernel-metadata.json`). Models: `google/gemma-4` variants `gemma-4-31b-it-qat-w4a16-ct` and `gemma-4-e4b-it-qat-w4a16-ct` (served, scored) and their `*-qat-q4_0-unquantized` bf16 siblings (trained). Local tooling: Python 3.11+, `kaggle` CLI 2.2+; local trainer tests need transformers 5.13 + peft 0.19 (a venv that mirrors Kaggle's versions).
+
+**Running an experiment.**
+1. Look up the experiment in `docs/STRATEGY.md` (or the paper's appendix table): it names the generator script, the Kaggle kernel id, the input datasets, the decision rule and the result.
+2. Build its inputs. Example (on-policy distillation): `python scripts/g20/build_opd_dataset.py <capture.jsonl.gz> <teacher_scores.npz> <teacher_meta.json> <out_dir>` from the outputs of the G20 and G20b kernels, then upload `<out_dir>` as a Kaggle dataset.
+3. Generate and push the notebook: `python scripts/g21/make_g21_notebook.py && kaggle kernels push -p kaggle_assets/g21`. Each notebook checks it got 4x L4, gates on a 2-4 task smoke round before the long round, and writes a `*_summary.json` with the numbers the paper reports.
+4. Fetch results: `kaggle kernels output <kernel id> -p <dir> --file-pattern "summary|task_results"` (the output listing pages 20 files, so use a pattern).
+
+**Submissions.** Build `submission.zip` only with `python scripts/build_submission_zip.py <out.zip> <submission_dir>` (POSIX entry names), check it on Linux with `scripts/make_zip_check_notebook.py`, then submit with `scripts/submit_pinned_zip.py <submission_dir> <sha256 prefix> "<message>"`.
+
+**Tests (no GPU).** `python scripts/g20/test_opd_score.py`, `python scripts/g20/test_train_opd.py` (tiny random Gemma 4; checks that a teacher equal to the student gives loss 0), `python scripts/g15/test_build_pairs.py`, `python scripts/g15/test_train_rpo.py`, `python scripts/g18/test_teacher_convert.py`, `python scripts/g2/test_capture_proxy.py`.
+
+**Commit hashes.** `docs/STRATEGY.md` cites hashes of the original local history; `docs/commit_map.tsv` maps them to the published ones (the history was rewritten once before publication, see its header). Commit dates are unchanged and show that each decision rule was recorded before its result.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE).
+Apache License 2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). The agent prompts in `submission*/prompts/` are adapted from the competition's sample submission.

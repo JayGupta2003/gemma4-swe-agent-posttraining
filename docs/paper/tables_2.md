@@ -8,6 +8,7 @@
 | E4B base B2 prompt | 7 | 69 | 1 | 125 | 12 |
 | E4B base verify prompt | 8 | 68 | 0 | 117 | 12 |
 | E4B + LoRA (31B traces) | 9 | 30 | 44 | 393 | 33 |
+| E4B + LoRA (Qwen3-Coder episodes) | 3 | 45 | 10 | 137 | 9 |
 
 E4B base rounds: union 14 tasks; solved in at least 2 of the 3 rounds: 6; all 14 are also solved by the 31B in some round: True.
 

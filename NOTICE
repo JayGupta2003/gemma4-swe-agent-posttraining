@@ -1,0 +1,8 @@
+gemma4-swe-agent-posttraining
+Copyright 2026 Jay Gupta
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The agent prompts in submission*/prompts/ are adapted from the sample submission of the Kaggle
+"Google - The Gemma 4 Developer Agent Competition" (Google LLC), whose competition data are licensed
+for competition and commercial use under Apache 2.0.

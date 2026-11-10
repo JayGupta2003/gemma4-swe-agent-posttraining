@@ -83,8 +83,12 @@ e4 = {"E4B base" + NL + "5-min prompt": R(D / "g14a_run1_2026-10-24/g14a/e4b/tas
       "E4B base" + NL + "verify prompt": R(D / "g14c_run1_2026-10-25/g14c/e4b_v/task_results.jsonl")}
 e4_lora = R(D / "g14b_run1_2026-10-25/g14b/e1/task_results.jsonl")
 bars = [("31B base" + NL + "round 1", runs["base r1"], GRAY), ("31B base" + NL + "round 2", runs["base r2"], GRAY)] + [(k, v, BLUE) for k, v in e4.items()] + [("E4B + LoRA" + NL + "(31B traces)", e4_lora, ORANGE)]
+bars.append(("E4B + LoRA" + NL + "(Qwen3-Coder" + NL + "episodes)", R(D / "g18_run1/g18/e1/task_results.jsonl"), ORANGE))
+_g21 = D / "g21_run1/g21/e1/task_results.jsonl"            # on-policy distillation; added once its results are downloaded
+if _g21.exists():
+    bars.append(("E4B + on-policy" + NL + "distillation", R(_g21), AQUA))
 summ = []
-fig, ax = plt.subplots(figsize=(8.2, 3.9), dpi=200)
+fig, ax = plt.subplots(figsize=(9.6, 4.2), dpi=200)
 for i, (lab, rr, col) in enumerate(bars):
     rows = list(rr.values())
     res_n, pat, cap = sum(r["resolved"] for r in rows), sum(r.get("agent_patch_size", 0) > 0 for r in rows), sum(kind(r) == "C" for r in rows)
@@ -96,7 +100,7 @@ ax.set_ylabel("tasks resolved (of 75)")
 ax.set_ylim(0, 34)
 ax.yaxis.grid(True, color=GRID, linewidth=0.6)
 ax.set_axisbelow(True)
-ax.set_title("E4B solves 7-10 tasks whatever the prompt; distillation trades patches for precision", loc="left", fontsize=10.5, color=INK)
+ax.set_title("E4B solves 7-10 tasks whatever the prompt; sequence distillation does not raise the total", loc="left", fontsize=10.5, color=INK)
 fig.tight_layout()
 fig.savefig(OUT / "fig6_small_model.png")
 plt.close(fig)

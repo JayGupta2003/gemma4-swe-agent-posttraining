@@ -74,6 +74,14 @@
    "capped": 44,
    "mean_task_s": 393,
    "median_calls": 33
+  },
+  {
+   "round": "E4B + LoRA (Qwen3-Coder episodes)",
+   "resolved": 3,
+   "patches_written": 45,
+   "capped": 10,
+   "mean_task_s": 137,
+   "median_calls": 9
   }
  ],
  "table5_pairwise_flips": {
