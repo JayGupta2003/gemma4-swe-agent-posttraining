@@ -82,6 +82,14 @@
    "capped": 10,
    "mean_task_s": 137,
    "median_calls": 9
+  },
+  {
+   "round": "E4B + on-policy distillation (60 of 75 run)",
+   "resolved": 6,
+   "patches_written": 9,
+   "capped": 52,
+   "mean_task_s": 478,
+   "median_calls": 15.0
   }
  ],
  "table5_pairwise_flips": {
