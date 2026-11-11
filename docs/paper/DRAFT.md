@@ -151,7 +151,7 @@ All GPU runs: Kaggle notebooks on 4x L4, offline; quota hours = 2x wall hours. N
 | G20/G20b | E4B pool rollouts + 31B scoring | 171 tasks; 244 segments | prompt_logprobs top-8, 512-token chunks | 4.8 | - | 25/171; 2.93M tokens scored |
 | G21 | E4B on-policy distillation | 244 segments, 712k loss tokens | coarse top-8 reverse KL, lr 1e-4, 1 epoch, 122 steps | ~10 | >= 15/75 candidate, 12-14 weak, <= 11 null, > 20 capped failure | failure: 6/60 (watchdog at 60 tasks), 52 capped, 9 patches; KL 0.60 -> 0.19 |
 | G22 | G21 adapter, reasoning capped; base control | 75 tasks x 2 arms | thinking budget 512, output cap 4096, no training | ~9 | >= 12/75, <= 8 capped and >= base@512 + 3 signal; <= 11 null; > 20 capped failure | failure: 9/75, 50 capped, 15 patches; base at the same cap 11/75, 1 capped, 65 patches |
-| G23 | E4B action-only on-policy distillation | 244 segments, 151k action tokens | as G21, reasoning targets removed from the loss | <= 11 | >= 15/75, <= 8 capped, Wait <= 1.5/10k candidate; <= 11 null | running at submission |
+| G23 | E4B action-only on-policy distillation | 244 segments, 151k action tokens | as G21, reasoning targets removed from the loss | ~8-11 | >= 15/75, <= 8 capped, Wait <= 1.5/10k candidate; <= 11 null | running at submission |
 
 ## Appendix B. Next steps (supplementary)
 
