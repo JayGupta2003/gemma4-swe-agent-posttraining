@@ -106,6 +106,14 @@
    "capped": 1,
    "mean_task_s": 126,
    "median_calls": 13
+  },
+  {
+   "round": "E4B + action-only distillation (44 of 75 run)",
+   "resolved": 6,
+   "patches_written": 42,
+   "capped": 5,
+   "mean_task_s": 188,
+   "median_calls": 11.5
   }
  ],
  "table5_pairwise_flips": {

@@ -12,6 +12,7 @@
 | E4B + on-policy distillation (60 of 75 run) | 6 | 9 | 52 | 478 | 15 |
 | E4B + on-policy distillation, reasoning capped | 9 | 15 | 50 | 450 | 37 |
 | E4B base, reasoning capped | 11 | 65 | 1 | 126 | 13 |
+| E4B + action-only distillation (44 of 75 run) | 6 | 42 | 5 | 188 | 11.5 |
 
 E4B base rounds: union 14 tasks; solved in at least 2 of the 3 rounds: 6; all 14 are also solved by the 31B in some round: True.
 

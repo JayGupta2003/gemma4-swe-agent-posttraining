@@ -91,8 +91,11 @@ _g22 = D / "g22_run1/g22"                                      # G22: reasoning 
 if (_g22 / "e1/task_results.jsonl").exists():
     bars.append(("E4B + on-policy" + NL + "distillation," + NL + "reasoning capped", R(_g22 / "e1/task_results.jsonl"), AQUA))
     bars.append(("E4B base," + NL + "reasoning capped", R(_g22 / "b512/task_results.jsonl"), BLUE))
+_g23 = D / "g23_run1/g23/e1/task_results.jsonl"            # G23: action-only distillation; the kernel died after 44 tasks
+if _g23.exists():
+    bars.append(("E4B + action-only" + NL + "distillation" + NL + "(44 of 75 run)", R(_g23), AQUA))
 summ = []
-fig, ax = plt.subplots(figsize=(11.5, 4.4), dpi=200)
+fig, ax = plt.subplots(figsize=(12.5, 4.4), dpi=200)
 for i, (lab, rr, col) in enumerate(bars):
     rows = list(rr.values())
     res_n, pat, cap = sum(r["resolved"] for r in rows), sum(r.get("agent_patch_size", 0) > 0 for r in rows), sum(kind(r) == "C" for r in rows)
