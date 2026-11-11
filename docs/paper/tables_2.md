@@ -10,6 +10,8 @@
 | E4B + LoRA (31B traces) | 9 | 30 | 44 | 393 | 33 |
 | E4B + LoRA (Qwen3-Coder episodes) | 3 | 45 | 10 | 137 | 9 |
 | E4B + on-policy distillation (60 of 75 run) | 6 | 9 | 52 | 478 | 15 |
+| E4B + on-policy distillation, reasoning capped | 9 | 15 | 50 | 450 | 37 |
+| E4B base, reasoning capped | 11 | 65 | 1 | 126 | 13 |
 
 E4B base rounds: union 14 tasks; solved in at least 2 of the 3 rounds: 6; all 14 are also solved by the 31B in some round: True.
 

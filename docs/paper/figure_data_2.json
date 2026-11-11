@@ -90,6 +90,22 @@
    "capped": 52,
    "mean_task_s": 478,
    "median_calls": 15.0
+  },
+  {
+   "round": "E4B + on-policy distillation, reasoning capped",
+   "resolved": 9,
+   "patches_written": 15,
+   "capped": 50,
+   "mean_task_s": 450,
+   "median_calls": 37
+  },
+  {
+   "round": "E4B base, reasoning capped",
+   "resolved": 11,
+   "patches_written": 65,
+   "capped": 1,
+   "mean_task_s": 126,
+   "median_calls": 13
   }
  ],
  "table5_pairwise_flips": {

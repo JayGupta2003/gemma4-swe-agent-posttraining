@@ -87,8 +87,12 @@ bars.append(("E4B + LoRA" + NL + "(Qwen3-Coder" + NL + "episodes)", R(D / "g18_r
 _g21 = D / "g21_run1/g21/e1/task_results.jsonl"            # on-policy distillation; added once its results are downloaded
 if _g21.exists():
     bars.append(("E4B + on-policy" + NL + "distillation" + NL + "(60 of 75 run)", R(_g21), AQUA))   # watchdog stopped the round at 60 tasks
+_g22 = D / "g22_run1/g22"                                      # G22: reasoning capped at 512 tokens, adapter and base control
+if (_g22 / "e1/task_results.jsonl").exists():
+    bars.append(("E4B + on-policy" + NL + "distillation," + NL + "reasoning capped", R(_g22 / "e1/task_results.jsonl"), AQUA))
+    bars.append(("E4B base," + NL + "reasoning capped", R(_g22 / "b512/task_results.jsonl"), BLUE))
 summ = []
-fig, ax = plt.subplots(figsize=(9.6, 4.2), dpi=200)
+fig, ax = plt.subplots(figsize=(11.5, 4.4), dpi=200)
 for i, (lab, rr, col) in enumerate(bars):
     rows = list(rr.values())
     res_n, pat, cap = sum(r["resolved"] for r in rows), sum(r.get("agent_patch_size", 0) > 0 for r in rows), sum(kind(r) == "C" for r in rows)
@@ -100,7 +104,7 @@ ax.set_ylabel("tasks resolved (of 75)")
 ax.set_ylim(0, 34)
 ax.yaxis.grid(True, color=GRID, linewidth=0.6)
 ax.set_axisbelow(True)
-ax.set_title("E4B solves 7-10 tasks whatever the prompt; no distillation route raises the total", loc="left", fontsize=10.5, color=INK)
+ax.set_title("E4B solves 7-11 tasks whatever the prompt or reasoning cap; no distillation route raises the total", loc="left", fontsize=10.5, color=INK)
 fig.tight_layout()
 fig.savefig(OUT / "fig6_small_model.png")
 plt.close(fig)
