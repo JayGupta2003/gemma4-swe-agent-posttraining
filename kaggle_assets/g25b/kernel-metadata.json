@@ -1,0 +1,30 @@
+{
+  "id": "noobhunterjay/gemma-4-g25b-e4b-freshswe-rollouts",
+  "title": "Gemma 4 G25b E4B FreshSWE Rollouts",
+  "code_file": "g25b.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "metric/gemma-4-developer-agent-wheelhouse",
+    "noobhunterjay/gemma4-g18-data",
+    "moshegolderson/freshswe-py"
+  ],
+  "kernel_sources": [
+    "noobhunterjay/gemma-4-g25a-freshswe-env"
+  ],
+  "competition_sources": [
+    "gemma-4-developer-agent"
+  ],
+  "model_sources": [
+    "google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"
+  ],
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+  "machine_shape": "NvidiaL4"
+}
